@@ -1,0 +1,5 @@
+- 👋 Hi, I’m zq
+- 👀 I’m interested in scripting/programming
+- 🌱 I’m currently learning how to use blender and animating and learning new programming codes
+- 💞️ I’m looking to collaborate on scripting/lua/roblox dev/animating
+- 📫 How to reach me discord, ! zq#6146
