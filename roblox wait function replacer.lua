@@ -1,4 +1,4 @@
-local function wait(num)
+local function wait(num) -- great for rpm guns like local function rpm(num) to change it
 	if not num then
 		return os.clock()
 	else
