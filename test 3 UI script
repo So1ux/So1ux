@@ -71,7 +71,7 @@ local function addtext(part, par, text)
 		txt.BackgroundTransparency = 1
 		txt.Size = UDim2.new(1, 0, 1, 0)
 		txt.TextStrokeTransparency = 0
-		txt.TextColor = Color3.new(0.501961, 0, 0.00813306)
+		txt.TextColor3 = Color3.new(0.501961, 0, 0.00813306)
 		txt.Font = Enum.Font.SciFi
 	end
 end
@@ -87,7 +87,7 @@ local function addESP(char)
 		coroutine.resume(coroutine.create(function()
 			addtext(char:WaitForChild("Head"), folder, char.Name)
 		end))
-		delay(1, function()
+		d(0.5, function()
 			for _, v in pairs(char:GetChildren()) do
 				if v:IsA("BasePart") and table.find(bodyparts, v.Name) then
 					boxadornment(v, folder)
