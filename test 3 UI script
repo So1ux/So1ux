@@ -77,6 +77,9 @@ local function addtext(part, par, text)
 end
 local function addESP(char)
 	if char.Name~=plr.Name then
+		if espfolder:FindFirstChild(char.Name) then
+			espfolder[char.Name]:Destroy()
+		end
 		local bodyparts = {'Left Arm'; 'Torso'; 'Right Arm'; 'Left Leg'; 'Right Leg'; 'Head'}
 		local folder = Instance.new("Folder")
 		folder.Name = char.Name
@@ -84,11 +87,13 @@ local function addESP(char)
 		coroutine.resume(coroutine.create(function()
 			addtext(char:WaitForChild("Head"), folder, char.Name)
 		end))
-		for _, v in pairs(char:GetChildren()) do
-			if v:IsA("BasePart") and table.find(bodyparts, v.Name) then
-				boxadornment(v, folder)
+		delay(1, function()
+			for _, v in pairs(char:GetChildren()) do
+				if v:IsA("BasePart") and table.find(bodyparts, v.Name) then
+					boxadornment(v, folder)
+				end
 			end
-		end
+		end)
 	end
 end
 local function clearESP()
