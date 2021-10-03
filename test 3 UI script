@@ -1,4 +1,4 @@
-local version = 1.41
+local version = 1.4
 local retTable = {}
 local whitelisted = {'unc1995';}
 retTable.Ver = version
@@ -33,6 +33,7 @@ retTable.Run = function()
 		tab:Label('V '.. version)
 		tab:Label('By zq/unc1995')
 		local tab2 = library:Window('Test 3 - Teleports')
+		--[[
 		local players = {}
 		tab2:DropDown('players[beta]', players, function(arg)
 			game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(game:GetService("Players")[arg].Character:GetPrimaryPartCFrame())
@@ -45,6 +46,7 @@ retTable.Run = function()
 				end
 			end
 		end))
+		]]
 		--local cred = library:Tab('Credits')
 		--cred:TextString('Created by: ', '! zq#6146')
 --[[
