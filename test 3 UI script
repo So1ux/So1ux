@@ -1,4 +1,4 @@
-local version = 1.39
+local version = 1.4
 local retTable = {}
 local whitelisted = {'unc1995';}
 retTable.Ver = version
@@ -32,6 +32,17 @@ retTable.Run = function()
 		local tab = library:Window('Test 3 - Utilities')
 		tab:Label('V '.. version)
 		tab:Label('By zq/unc1995')
+		local tab2 = library:Window('Test 3 - Teleports')
+		local e = tab2:DropDown('players[beta]', game:GetService("Players"):GetPlayers(), function(arg)
+			game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(arg.Character:GetPrimaryPartCFrame())
+		end)
+		coroutine.resume(coroutine.create(function()
+			while wait(2) do
+				e = tab2:DropDown('players[beta]', game:GetService("Players"):GetPlayers(), function(arg)
+					game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(arg.Character:GetPrimaryPartCFrame())
+				end)
+			end
+		end))
 		--local cred = library:Tab('Credits')
 		--cred:TextString('Created by: ', '! zq#6146')
 --[[
@@ -301,7 +312,7 @@ local Cam = workspace.CurrentCamera
 				clearHBE()
 			end
 		end)
-		tab:Dropdown('Targets', {'Head', 'Torso'}, function(arg)
+		tab:Dropdown('Targets', {'Head';'Torso'}, function(arg)
 			if arg == 'Head' then
 				q = true
 			elseif arg == 'Torso' then
