@@ -1,4 +1,4 @@
-local version = 1.32
+local version = 1.33
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -6,7 +6,7 @@ retTable.Run = function()
 		getgenv().executed = true
 		getgenv().DoNotification = function(text)
 			game:GetService("StarterGui"):SetCore("SendNotification", {
-				Title = 'zq on top';
+				Title = 'zq/unc1995 on top';
 				Text = 'You have already executed.'
 			})
 		end
@@ -24,7 +24,7 @@ H to buy akm and mare
 PASSIVES:
 ability to use tools at any conditions.
 ]]
-		local distance = 30
+		local distance = 40
 		local q = false
 		local on = false
 		local d = delay
@@ -43,8 +43,8 @@ ability to use tools at any conditions.
 		local flymulti = 5
 		local espfolder = Instance.new("Folder")
 		espfolder.Parent = game:GetService("CoreGui")
-
 		local usingesp = false
+		local autoattack = false
 		-- workspace.Map
 --[[
 PhysicService:CreateCollisionGroup('mapParts')
@@ -528,6 +528,10 @@ end,Enum.KeyCode.P);
 		end)
 		]]
 		local checkupdatedb = false
+		tab:Toggle('kill aura[melee]', false, function(bool)
+			autoattack = bool
+		end)
+
 		tab:Button("check for updates", function()
 			if checkupdatedb==false then checkupdatedb=true
 				d(2, function()
@@ -536,7 +540,7 @@ end,Enum.KeyCode.P);
 				local loadedNew = loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/main/test%203%20UI%20script'))()
 				if loadedNew.Ver~=version then
 					game:GetService('StarterGui'):SetCore('SendNotification', {
-						Title = 'zq on top';
+						Title = 'zq/unc1995 on top';
 						Text = 'New Update Available, Updating to version: '.. tostring(loadedNew.Ver);
 						Duration = 4;
 					})
@@ -546,16 +550,17 @@ end,Enum.KeyCode.P);
 					noclipping = false
 					flying = false
 					tpw = false
+					autoattack = false
 					library:Destroy()
 					loadedNew.Run()
 					game:GetService('StarterGui'):SetCore('SendNotification', {
-						Title = 'zq on top';
+						Title = 'zq/unc1995 on top';
 						Text = 'Updated!';
 						Duration = 4;
 					})
 				else
 					game:GetService('StarterGui'):SetCore('SendNotification', {
-						Title = 'zq on top';
+						Title = 'zq/unc1995 on top';
 						Text = 'Current version is up to date, '.. tostring(version);
 						Duration = 2;
 					})
@@ -634,6 +639,38 @@ end,Enum.KeyCode.P);
 						char:TranslateBy(hum.MoveDirection*(speedmulti/25))
 					end
 				end)
+			end
+		end))
+		table.insert(gCons, game:GetService("RunService").RenderStepped:Connect(function()
+			if autoattack==true then
+				for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+					if v.Name~=plr.Name then
+						pcall(function()
+							if v.Character.PlayerStuff.Values.Downed.Value==false and v.Character.Humanoid.Health>0 then
+								if v:DistanceFromCharacter(plr.Character.PrimaryPart.Position)<=distance then
+									coroutine.resume(coroutine.create(function()
+										local ohInstance1 = v.Character.Head
+										local ohInstance2 = v.Character.Humanoid
+										local ohInstance3 = plr.Character.Torso
+										game:GetService("Players").LocalPlayer.Character:FindFirstChildOfClass("Tool").EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
+									end))
+									coroutine.resume(coroutine.create(function()
+										local ohInstance1 = v.Character.Head
+										local ohInstance2 = v.Character.Humanoid
+										local ohInstance3 = plr.Character.Torso
+										game:GetService("Players").LocalPlayer.Character['FireAxe'].EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
+									end))
+									coroutine.resume(coroutine.create(function()
+										local ohInstance1 = v.Character.Head
+										local ohInstance2 = v.Character.Humanoid
+										local ohInstance3 = plr.Character.Torso
+										game:GetService("Players").LocalPlayer.Character['MetalBat'].EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
+									end))
+								end
+							end
+						end)
+					end
+				end
 			end
 		end))
 	end))
