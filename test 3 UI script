@@ -1,4 +1,4 @@
-local version = 1.8
+local version = 1.9
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -529,7 +529,7 @@ end,Enum.KeyCode.P);
 				if loadedNew.Ver~=version then
 					game:GetService('StarterGui'):SetCore('SendNotification', {
 						Title = 'zq on top';
-						Text = 'New Update Available, Updating.';
+						Text = 'New Update Available, Updating to version: '.. tostring(loadedNew.Ver);
 						Duration = 5;
 					})
 					clearESP()
@@ -542,6 +542,12 @@ end,Enum.KeyCode.P);
 					game:GetService('StarterGui'):SetCore('SendNotification', {
 						Title = 'zq on top';
 						Text = 'Updated!';
+						Duration = 5;
+					})
+				else
+					game:GetService('StarterGui'):SetCore('SendNotification', {
+						Title = 'zq on top';
+						Text = 'Current version is up to date, '.. tostring(version);
 						Duration = 5;
 					})
 				end
