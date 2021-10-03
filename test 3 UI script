@@ -34,7 +34,7 @@ retTable.Run = function()
 		tab:Label('By zq/unc1995')
 		local tab2 = library:Window('Test 3 - Teleports')
 		local players = {}
-		local e = tab2:DropDown('players[beta]', players, function(arg)
+		tab2:DropDown('players[beta]', players, function(arg)
 			game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(game:GetService("Players")[arg].Character:GetPrimaryPartCFrame())
 		end)
 		coroutine.resume(coroutine.create(function()
