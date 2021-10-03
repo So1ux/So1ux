@@ -1,4 +1,4 @@
-local version = 1.9
+local version = 1.31
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -36,6 +36,7 @@ ability to use tools at any conditions.
 		local hHBE = false
 		local hbeCons = {}
 		local espCons = {}
+		local gCons = {}
 		local noclipping = false
 		local tpw = false
 		local speedmulti = 5
@@ -124,6 +125,13 @@ end
 			for _, v in pairs(espfolder:GetChildren()) do
 				pcall(function()
 					v:Destroy()
+				end)
+			end
+		end
+		local function clearGCONS()
+			for _, v in pairs(gCons) do
+				pcall(function()
+					v:Disconnect()
 				end)
 			end
 		end
@@ -252,7 +260,7 @@ local Cam = workspace.CurrentCamera
 		tab:Slider('Speed (5 default)', 5, 100, 5, function(arg)
 			speedmulti = arg
 		end)
-		uis.InputBegan:Connect(function(inp, gps)
+		table.insert(gCons, uis.InputBegan:Connect(function(inp, gps)
 	--[[
 	if not gps and inp.KeyCode==Enum.KeyCode.J then tpw = not tpw game:GetService("StarterGui"):SetCore('SendNotification', {
 		Title = 'speedy ';
@@ -438,15 +446,15 @@ local Cam = workspace.CurrentCamera
 					end
 				end
 			end
-		end)
+		end))
 
 
-		game:GetService("RunService").RenderStepped:Connect(function()
+		table.insert(gCons, game:GetService("RunService").RenderStepped:Connect(function()
 			game:GetService("StarterGui"):SetCoreGuiEnabled("Backpack", true)
 			plr.Character.Humanoid.JumpPower=50
-		end)
+		end))
 
-		game:GetService("Players").LocalPlayer.Chatted:Connect(function(msg)
+		table.insert(gCons, game:GetService("Players").LocalPlayer.Chatted:Connect(function(msg)
 			if msg == '.akm' then
 				game:GetService("ReplicatedStorage").PurchaseEvents.AKM:FireServer()
 			end
@@ -456,7 +464,7 @@ local Cam = workspace.CurrentCamera
 			if msg == '.a10' then
 				game:GetService("ReplicatedStorage").PurchaseEvents.A10:FireServer()
 			end
-		end)
+		end))
 
 
 --[[
@@ -534,6 +542,7 @@ end,Enum.KeyCode.P);
 					})
 					clearESP()
 					clearHBE()
+					clearGCONS()
 					noclipping = false
 					flying = false
 					tpw = false
@@ -553,7 +562,7 @@ end,Enum.KeyCode.P);
 				end
 			end
 		end)
-		uis.InputBegan:Connect(function(inp, gps)
+		table.insert(gCons, uis.InputBegan:Connect(function(inp, gps)
 			if inp.KeyCode==Enum.KeyCode.W then
 				holding.w = true
 			end
@@ -566,9 +575,9 @@ end,Enum.KeyCode.P);
 			if inp.KeyCode==Enum.KeyCode.D then
 				holding.d = true
 			end
-		end)
+		end))
 
-		uis.InputEnded:Connect(function(inp, gps)
+		table.insert(gCons, uis.InputEnded:Connect(function(inp, gps)
 			if inp.KeyCode==Enum.KeyCode.W then
 				holding.w = false
 			end
@@ -582,9 +591,9 @@ end,Enum.KeyCode.P);
 				holding.d = false
 			end
 
-		end)
+		end))
 
-		game:GetService('RunService').Stepped:Connect(function()
+		table.insert(gCons, game:GetService('RunService').Stepped:Connect(function()
 			if noclipping==true then 
 				pcall(function()
 					for _, v in pairs(plr.Character:GetDescendants()) do
@@ -615,8 +624,8 @@ end,Enum.KeyCode.P);
 					plr.Character.PrimaryPart.Anchored = false
 				end)
 			end
-		end)
-		while game:GetService("RunService").Stepped:Wait() do
+		end))
+		table.insert(gCons, game:GetService("RunService").Stepped:Connect(function()
 			if tpw==true then
 				pcall(function()
 					if game:GetService("Players").LocalPlayer.Character.Humanoid.MoveDirection.Magnitude>0 then
@@ -626,7 +635,7 @@ end,Enum.KeyCode.P);
 					end
 				end)
 			end
-		end
+		end))
 	end))
 end
 
