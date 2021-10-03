@@ -67,14 +67,25 @@ end
 ]]
 		local function boxadornment(part, par)
 			if part and par then
-				local boxhandle = Instance.new("BoxHandleAdornment", par)
-				boxhandle.Adornee = part
-				boxhandle.AlwaysOnTop=true
-				boxhandle.Visible = true
-				boxhandle.ZIndex = 10
-				boxhandle.Transparency = 0.65
-				boxhandle.Color3 = Color3.new(0.501961, 0, 0.00813306)
-				boxhandle.Size = part.Size
+				if part.Name=='Head' then
+					local boxhandle = Instance.new("BoxHandleAdornment", par)
+					boxhandle.Adornee = part
+					boxhandle.AlwaysOnTop=true
+					boxhandle.Visible = true
+					boxhandle.ZIndex = 10
+					boxhandle.Transparency = 0.8
+					boxhandle.Color3 = Color3.new(0.501961, 0, 0.00813306)
+					boxhandle.Size = Vector3.new(2, 1, 1)
+				else
+					local boxhandle = Instance.new("BoxHandleAdornment", par)
+					boxhandle.Adornee = part
+					boxhandle.AlwaysOnTop=true
+					boxhandle.Visible = true
+					boxhandle.ZIndex = 10
+					boxhandle.Transparency = 0.8
+					boxhandle.Color3 = Color3.new(0.501961, 0, 0.00813306)
+					boxhandle.Size = part.Size
+				end
 			end
 		end
 		local function addtext(part, par, text)
