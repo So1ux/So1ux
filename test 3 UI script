@@ -1,4 +1,4 @@
-local version = 1.33
+local version = 1.34
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -653,18 +653,6 @@ end,Enum.KeyCode.P);
 										local ohInstance2 = v.Character.Humanoid
 										local ohInstance3 = plr.Character.Torso
 										game:GetService("Players").LocalPlayer.Character:FindFirstChildOfClass("Tool").EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
-									end))
-									coroutine.resume(coroutine.create(function()
-										local ohInstance1 = v.Character.Head
-										local ohInstance2 = v.Character.Humanoid
-										local ohInstance3 = plr.Character.Torso
-										game:GetService("Players").LocalPlayer.Character['FireAxe'].EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
-									end))
-									coroutine.resume(coroutine.create(function()
-										local ohInstance1 = v.Character.Head
-										local ohInstance2 = v.Character.Humanoid
-										local ohInstance3 = plr.Character.Torso
-										game:GetService("Players").LocalPlayer.Character['MetalBat'].EventsFolder.Hit:FireServer(ohInstance1, ohInstance2, ohInstance3)
 									end))
 								end
 							end
