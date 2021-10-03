@@ -1,4 +1,4 @@
-local version = 1.4
+local version = 1.39
 local retTable = {}
 local whitelisted = {'unc1995';}
 retTable.Ver = version
@@ -33,14 +33,16 @@ retTable.Run = function()
 		tab:Label('V '.. version)
 		tab:Label('By zq/unc1995')
 		local tab2 = library:Window('Test 3 - Teleports')
-		local e = tab2:DropDown('players[beta]', game:GetService("Players"):GetPlayers(), function(arg)
-			game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(arg.Character:GetPrimaryPartCFrame())
+		local players = {}
+		local e = tab2:DropDown('players[beta]', players, function(arg)
+			game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(game:GetService("Players")[arg].Character:GetPrimaryPartCFrame())
 		end)
 		coroutine.resume(coroutine.create(function()
 			while wait(2) do
-				e = tab2:DropDown('players[beta]', game:GetService("Players"):GetPlayers(), function(arg)
-					game:GetService("Players").LocalPlayer.Character:SetPrimaryPartCFrame(arg.Character:GetPrimaryPartCFrame())
-				end)
+				players = {}
+				for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+					table.insert(players, v.Name)
+				end
 			end
 		end))
 		--local cred = library:Tab('Credits')
