@@ -109,6 +109,11 @@ end
 				end)
 			end
 		end
+		local function removeESP(name)
+			if espfolder:FindFirstChild(name) then
+				espfolder[name]:Destroy()
+			end
+		end
 		local function clearESP()
 			for _, v in pairs(espCons) do
 				pcall(function()
@@ -498,19 +503,36 @@ end,Enum.KeyCode.P);
 						addESP(char)
 					end))
 				end))
+				table.insert(espCons, game:GetService("Players").PlayerRemoving:Connect(function(plr)
+					removeESP(plr.Name)
+				end))
 
 			elseif bool == false then
 				clearESP()
 			end
 		end)
+		--[[
 		tab:Button('Mod Check', function()
 			god()
 		end)
 		tab:Toggle('Mod Notifier', false, function()
 			local mods = {'Turpari', 'DonovanL2012', 'DonovanL2011', ''}
 		end)
-		tab:Button("Check updates[BETA]", function()
-
+		]]
+		local checkupdatedb = false
+		tab:Button("check updates", function()
+			if checkupdatedb==false then checkupdatedb=true
+				d(2, function()
+					checkupdatedb = false
+				end)
+				if loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/main/test%203%20UI%20script'))().Ver~=version then
+					game:GetService('StarterGui'):SetCore('SendNotification', {
+						Title = 'Exploits';
+						Text = 'New Update Available';
+						Duration = 10;
+					})
+				end
+			end
 		end)
 		uis.InputBegan:Connect(function(inp, gps)
 			if inp.KeyCode==Enum.KeyCode.W then
