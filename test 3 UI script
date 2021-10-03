@@ -1,4 +1,4 @@
-local version = 1.35
+local version = 1.36
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -7,12 +7,19 @@ retTable.Run = function()
 		getgenv().DoNotification = function(text)
 			game:GetService("StarterGui"):SetCore("SendNotification", {
 				Title = 'zq/unc1995 on top';
-				Text = 'You have already executed.'
+				Text = 'You have already executed.';
+				Duration = 4;
 			})
 		end
+		game:GetService("StarterGui"):SetCore("SendNotification", {
+			Title = 'zq/unc1995 on top';
+			Text = 'made by zq(unc1995), and why is zq on top tho???';
+			Duration = 5
+		})
 		local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
 		local tab = library:Window('Test 3 - Utilities')
 		tab:Label('V '.. version)
+		tab:Label('By zq/unc1995')
 		--local cred = library:Tab('Credits')
 		--cred:TextString('Created by: ', '! zq#6146')
 --[[
