@@ -528,9 +528,9 @@ end,Enum.KeyCode.P);
 				local loadedNew = loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/main/test%203%20UI%20script'))()
 				if loadedNew.Ver~=version then
 					game:GetService('StarterGui'):SetCore('SendNotification', {
-						Title = 'Exploits';
+						Title = 'zq on top';
 						Text = 'New Update Available, Updating.';
-						Duration = 10;
+						Duration = 5;
 					})
 					clearESP()
 					clearHBE()
@@ -539,6 +539,11 @@ end,Enum.KeyCode.P);
 					tpw = false
 					library:Destroy()
 					loadedNew.Run()
+					game:GetService('StarterGui'):SetCore('SendNotification', {
+						Title = 'zq on top';
+						Text = 'Updated!';
+						Duration = 5;
+					})
 				end
 			end
 		end)
