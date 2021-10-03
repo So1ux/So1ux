@@ -1,5 +1,5 @@
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
-local version = 1.4
+local version = 1.5
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
