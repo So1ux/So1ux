@@ -1,5 +1,5 @@
 local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/miroeramaa/TurtleLib/main/TurtleUiLib.lua"))()
-local version = 1.5
+local version = 1.6
 local retTable = {}
 retTable.Ver = version
 retTable.Run = function()
@@ -520,17 +520,25 @@ end,Enum.KeyCode.P);
 		end)
 		]]
 		local checkupdatedb = false
-		tab:Button("check updates", function()
+		tab:Button("check for updates", function()
 			if checkupdatedb==false then checkupdatedb=true
 				d(2, function()
 					checkupdatedb = false
 				end)
-				if loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/main/test%203%20UI%20script'))().Ver~=version then
+				local loadedNew = loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/main/test%203%20UI%20script'))()
+				if loadedNew.Ver~=version then
 					game:GetService('StarterGui'):SetCore('SendNotification', {
 						Title = 'Exploits';
-						Text = 'New Update Available';
+						Text = 'New Update Available, Updating.';
 						Duration = 10;
 					})
+					clearESP()
+					clearHBE()
+					noclipping = false
+					flying = false
+					tpw = false
+					library:Destroy()
+					loadedNew.Run()
 				end
 			end
 		end)
