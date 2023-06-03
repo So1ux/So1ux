@@ -62,7 +62,7 @@ local function protect_gui(obj)
 		return
 	end
 	if syn and syn.protect_gui then
-		syn.protect_gui(obj)
+		-- syn.protect_gui(obj)
 		obj.Parent = game.CoreGui
 	elseif PROTOSMASHER_LOADED then
 		obj.Parent = get_hidden_gui()
