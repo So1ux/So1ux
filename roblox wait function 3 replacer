@@ -1,0 +1,5 @@
+local m = Instance.new("Folder")
+local wait = function(a)
+	  return m:WaitForChild('_', a)
+end
+
