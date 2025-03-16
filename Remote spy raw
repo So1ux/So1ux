@@ -51,7 +51,7 @@ local Arguments = CreateInstance('TextLabel',{Font=Enum.Font.SourceSans,FontSize
 local Template = CreateInstance('TextButton',{Font=Enum.Font.SourceSans,FontSize=Enum.FontSize.Size14,Text='Remote (RE)',TextColor3=Color3.new(1, 1, 1),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0, 0, 0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=Enum.TextXAlignment.Center,TextYAlignment=Enum.TextYAlignment.Center,AutoButtonColor=true,Modal=false,Selected=false,Style=Enum.ButtonStyle.Custom,Active=true,AnchorPoint=Vector2.new(0, 0),BackgroundColor3=Color3.new(0.454902, 0.45098, 0.462745),BackgroundTransparency=0,BorderColor3=Color3.new(0, 0, 0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0.0494699664, 0, 0.0783141553, 0),Rotation=0,Selectable=true,Size=UDim2.new(0.845160127, 0, 0.0699969232, 0),SizeConstraint=Enum.SizeConstraint.RelativeXY,Visible=false,ZIndex=1,Name='Template',Parent = ScreenGui})
 local RemoveIgnores = CreateInstance('TextButton',{Font=Enum.Font.SourceSans,FontSize=Enum.FontSize.Size14,Text='clr ignores',TextColor3=Color3.new(1, 1, 1),TextScaled=false,TextSize=14,TextStrokeColor3=Color3.new(0, 0, 0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=false,TextXAlignment=Enum.TextXAlignment.Center,TextYAlignment=Enum.TextYAlignment.Center,AutoButtonColor=true,Modal=false,Selected=false,Style=Enum.ButtonStyle.Custom,Active=true,AnchorPoint=Vector2.new(0, 0),BackgroundColor3=Color3.new(0.2, 0.2, 0.203922),BackgroundTransparency=0,BorderColor3=Color3.new(0, 0, 0),BorderSizePixel=2,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0.387324125, 0, 0.497132242, 0),Rotation=0,Selectable=true,Size=UDim2.new(0.219718322, 0, 0.195602506, 0),SizeConstraint=Enum.SizeConstraint.RelativeXY,Visible=true,ZIndex=1,Name='RemoveIgnores',Parent = ButtonFrame})
 
-
+getgenv().Tagged = {}
 
 
 
@@ -163,12 +163,15 @@ oldRemoteEvent = hookmetamethod(game, "__index", newcclosure(function(self, inde
 	if not checkcaller() then
 		if index == "OnClientEvent" then
 			if self:IsA("RemoteEvent") then
-				oldRemoteEvent(self, index):Connect(function(...)
-					local args = {...}
-					if not table.find(ignoredRemotes, self) then
-						makeArray(self, args)
-					end
-				end)
+				if not table.find(getgenv().Tagged, self) then
+					table.insert(getgenv().Tagged, self)
+					oldRemoteEvent(self, index):Connect(function(...)
+						local args = {...}
+						if not table.find(ignoredRemotes, self) then
+							makeArray(self, args)
+						end
+					end)
+				end
 				return
 			end
 		end
@@ -181,18 +184,21 @@ oldRemoteFunction = hookmetamethod(game, "__newindex", newcclosure(function(self
 	if not checkcaller() then
 		if index == "OnClientInvoke" then
 			if self:IsA("RemoteFunction") then
-				return oldRemoteFunction(self, index, function(...)
-					local args = {...}
-					local jsonargs = {}
-					for i, v in pairs({value(...)}) do
-						table.insert(jsonargs, v)
-					end
-					if not table.find(ignoredRemotes, self) then
-						makeArray(self, args, jsonargs)
-					end
+				if not table.find(getgenv().Tagged, self) then
+					table.insert(getgenv().Tagged, self)
+					return oldRemoteFunction(self, index, function(...)
+						local args = {...}
+						local jsonargs = {}
+						for i, v in pairs({value(...)}) do
+							table.insert(jsonargs, v)
+						end
+						if not table.find(ignoredRemotes, self) then
+							makeArray(self, args, jsonargs)
+						end
 
-					return unpack(jsonargs)
-				end)
+						return unpack(jsonargs)
+					end)
+				end
 			end
 		end
 	end
