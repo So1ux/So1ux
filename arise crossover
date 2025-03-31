@@ -44,7 +44,7 @@ local listOfCommands = {
 	"stopfarm";
 	"cleardungeon";
 	"autodungeon";
-	
+	"stopautodungeon";
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
