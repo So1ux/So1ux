@@ -67,6 +67,7 @@ local currentAriseTarget = nil
 local dataRemoteEvent = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local runestoadd = {}
 local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+local qon = queue_on_teleport or syn.queue_on_teleport
 
 local espthreshold = math.huge
 
@@ -590,11 +591,15 @@ function buyticketdungeon()
 
 end
 
+function queueexecution()
+	qon("loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover'))()")
+end
+
 function autodungeon()
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
-		local qon = queue_on_teleport or syn.queue_on_teleport
-		qon("loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover'))()")
+		
+		queueexecution()
 		task.wait(1)
 		joinDungeon()
 		
@@ -759,6 +764,7 @@ function commands(cmd: string)
 	end
 end
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/secret%20cmd%20bar"))().new(commands, listOfCommands)
 
 if game.PlaceId == maingameid then
 	if isfile('autodungeon.txt') then
@@ -766,12 +772,14 @@ if game.PlaceId == maingameid then
 	end
 else
 	if isfile('autodungeon.txt') then
+		repeat task.wait(.1) until getClosestEnemyServer(true)
 		commands("cleardungeon")
 		_G.actionmode = "destroy"
+		queueexecution()
 	end
 end
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/secret%20cmd%20bar"))().new(commands, listOfCommands)
+
 _G.executearisegame = true
 game:GetService("UserInputService").InputBegan:Connect(function(inp, gps)
 	if gps then return end
