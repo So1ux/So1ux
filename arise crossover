@@ -1,0 +1,821 @@
+if game.GameId ~= 7074860883 then
+	return
+end
+-- arise script
+--loadstring(game:HttpGet("https://raw.githubusercontent.com/gumanba/Scripts/main/AriseCrossover"))()
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/secret%20cmd%20bar"))()
+-- this script uses cynxthical's secret cmd bar.
+-- syn.queue_on_teleport will be implemented soon.
+--[[
+commands:
+goto [name]
+togglem1
+toggleaction
+toggleactiontype
+]]
+
+local sourcecode = "https://githubcode"
+local maingameid = 87039211657390
+
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+-- task.wait(5)
+local listOfCommands = {
+	"goto";
+	"togglemobesp";
+	"togglem1";
+	"toggleaction";
+	"toggleautoarise";
+	"changeaction";
+	"joindungeon";
+	"espHpThreshold";
+	"playergoto";
+	"tpberu";
+	"tpdungeon";
+	"dungeonbuyticket";
+	"infiniteyield";
+	"dungeonRuneAdd";
+	"asc_serverhop";
+	"desc_serverhop";
+	"farm";
+	"stopfarm";
+	"cleardungeon";
+	"autodungeon";
+	
+}
+
+_G.actionmode = "arise" -- switch between "arise"/"destroy"
+if _G.executearisegame then return end
+
+local clientpath = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
+local newclientpath = workspace.__Main.__Enemies:WaitForChild("Server")
+local player = game:GetService("Players").LocalPlayer
+local petFolder = game:GetService("Players").LocalPlayer:WaitForChild("leaderstats").Inventory:WaitForChild("Pets")
+local petFolder_Workspace = workspace.__Main:WaitForChild("__Pets"):WaitForChild(tostring(player.UserId))
+local closestEnemyDistance = math.huge
+
+local autom1 = true
+local autoaction = true
+local autoarise = true
+local espCon = nil
+local espCon2 = nil
+local farming = false
+local closestEnemyMarker = nil
+local currentAriseTarget = nil
+local dataRemoteEvent = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+local runestoadd = {}
+local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+
+local espthreshold = math.huge
+
+local ariseattacking = false
+
+function isAlive(model)
+	local health = "0 hp" 
+	pcall(function()
+		health = model.HealthBar.Main.Bar.Amount.Text
+	end)
+	local alive = tonumber(string.sub(health, 1, 1)) > 0
+	return alive
+end
+
+function getClosestEnemy(onlyIsAlive: boolean)
+	local closestEnemy = nil
+	local shortestDistance = math.huge
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return nil
+	end
+
+	local playerHRP = character.HumanoidRootPart
+
+	for _, enemy in pairs(clientpath:GetChildren()) do
+		if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+			if onlyIsAlive then
+				if isAlive(enemy) then
+					local enemyHRP = enemy.HumanoidRootPart
+					local distance = (enemyHRP.Position - playerHRP.Position).Magnitude
+
+					if distance < shortestDistance then
+						shortestDistance = distance
+						closestEnemy = enemy
+					end
+				end
+			else
+				local enemyHRP = enemy.HumanoidRootPart
+				local distance = (enemyHRP.Position - playerHRP.Position).Magnitude
+
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closestEnemy = enemy
+				end
+			end
+		end
+	end
+
+	return closestEnemy
+end
+
+function convertLevelToString(level)
+	return (level == 1 and "E") or 
+		(level == 2 and "D") or
+		(level == 3 and "C") or 
+		(level == 4 and "B") or
+		(level == 5 and "A") or
+		(level == 6 and "S") or
+		(level == 7 and "SS") or 
+		(level == 8 and "G") or 
+		(level == 9 and "N")
+end
+
+function getRankWithId(id)
+	local last = tonumber(string.sub(id, #id, #id)) -- assuming ranks do not go past one digit.
+	if last then
+		local level = convertLevelToString(last)
+		return level
+	end
+	return "unknown"
+end
+
+function checkIfAliveServer(data)
+	local attribute = data:GetAttribute("HP")
+	if attribute and attribute>0 then
+		return true
+	elseif attribute then
+		return false
+	end
+	return nil
+end
+
+function getClosestEnemyServer(onlyIsAlive: boolean)
+	local closestEnemy = nil
+	local shortestDistance = math.huge
+	local character = player.Character
+	
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return nil
+	end
+
+	local playerHRP = character.HumanoidRootPart
+--[[
+local hp = v:GetAttribute("HP")
+		local id = v:GetAttribute("Id") -- the last letter (the digit) is what shows the level of the enemy.
+		local scale = v:GetAttribute("Scale")
+		local maxhp = v:GetAttribute("MaxHP")
+		local level = v:GetAttribute("Level")
+]]
+	for _, enemy in pairs(newclientpath:GetChildren()) do
+		if onlyIsAlive then
+			if checkIfAliveServer(enemy) then
+				local distance = (enemy.Position - playerHRP.Position).Magnitude
+
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closestEnemy = enemy
+				end
+			end
+		else
+			local distance = (enemy.Position - playerHRP.Position).Magnitude
+
+			if distance < shortestDistance then
+				shortestDistance = distance
+				closestEnemy = enemy
+			end
+		end
+	end
+	return closestEnemy
+end
+
+local function notify(title, text, duration)
+	game:GetService("StarterGui"):SetCore("SendNotification", {
+		Title = title;
+		Text = text;
+		Duration = duration or 2.5;
+	})
+end
+
+function serverhop(order)
+	-- order can only be "Desc" or "Asc"
+	if httprequest then
+		local servers = {}
+		local req = httprequest({Url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=%s&limit=100&excludeFullGames=true", game.PlaceId, order)})
+		local body = game:GetService("HttpService"):JSONDecode(req.Body)
+
+		if body and body.data then
+			for i, v in next, body.data do
+				if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) and v.playing < v.maxPlayers and v.id ~= game.JobId then
+					table.insert(servers, 1, v.id)
+				end
+			end
+		end
+
+		if #servers > 0 then
+			game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], player)
+		else
+			return notify("Serverhop", "Couldn't find a server.")
+		end
+	else
+		notify("Incompatible Exploit", "Your exploit does not support this command (missing request)")
+	end
+end
+function joinDungeon()
+	task.spawn(function()
+		local args = {
+			[1] = {
+				[1] = {
+					["Event"] = "DungeonAction",
+					["Action"] = "Create"
+				},
+				[2] = "\t"
+			}
+		}
+
+		-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+		retry3times(args, dataRemoteEvent)
+
+		-- add runes --
+		for i, v in pairs(runestoadd) do
+			local args = {
+				[1] = {
+					[1] = {
+						["Dungeon"] = player.UserId,
+						["Action"] = "AddItems",
+						["Slot"] = i,
+						["Event"] = "DungeonAction",
+						["Item"] = v, -- "DgRankUpRune"
+					},
+					[2] = "\n"
+				}
+			}
+
+			retry3times(args, dataRemoteEvent)
+			-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+		end
+		-- add runes --
+		task.wait(1)
+		local args = {
+			[1] = {
+				[1] = {
+					["Dungeon"] = player.UserId,
+					["Event"] = "DungeonAction",
+					["Action"] = "Start"
+				},
+				[2] = "\t"
+			}
+		}
+
+		-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+		retry3times(args, dataRemoteEvent)
+		table.clear(runestoadd)
+	end)
+end
+function getClosestEnemyWithName(name, onlyalive)
+	local closestEnemy = nil
+	local shortestDistance = math.huge
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return nil
+	end
+
+	local playerHRP = character.HumanoidRootPart
+
+	for _, enemy in pairs(clientpath:GetChildren()) do
+		if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+			if getName(enemy):lower() == name:lower() then
+				if (onlyalive and not isAlive(enemy)) then
+					continue
+				end
+				local enemyHRP = enemy.HumanoidRootPart
+				local distance = (enemyHRP.Position - playerHRP.Position).Magnitude
+
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closestEnemy = enemy
+				end
+			end
+		end
+	end
+
+	return closestEnemy
+end
+
+function getEquippedPets()
+	local array = {}
+	for i, v in pairs(petFolder_Workspace:GetChildren()) do
+		table.insert(array, tostring(v.Name))
+	end
+	return array
+end
+
+function getCodifiedPetPos() 
+	local newarray = {}
+	for i, v in pairs(getEquippedPets()) do
+		newarray[v] = getClosestEnemy(true):GetPivot().Position or getPlayerPosition() -- getPlayerPosition()
+	end
+	return newarray
+
+end
+
+function getPlayerPosition()
+	return player.Character.HumanoidRootPart.Position
+end
+
+function retry3times(args, remote)
+	for i = 1, 4, 1 do
+		local selfargs = args
+		if i == 1 then
+			selfargs[1][2] = "\n"
+		elseif i == 2 then
+			selfargs[1][2] = "\t"
+		elseif i == 3 then
+			if selfargs[1][1].AttackType then
+				selfargs[1][2] = "\8"
+			end
+		elseif i == 4 then
+			if selfargs[1][1].AttackType then
+				selfargs[1][2] = "\7"
+			end
+		end
+		remote:FireServer(unpack(selfargs))
+	end
+end
+
+function callAttack()
+	task.spawn(function()
+		local arisetarget = getClosestEnemy(true).Name
+		local args = {
+			[1] = {
+				[1] = {
+					["PetPos"] = getCodifiedPetPos(),
+					["AttackType"] = "All",
+					["Event"] = "Attack",
+					["Enemy"] = arisetarget
+				},
+				[2] = "\8"
+			}
+		}
+		currentAriseTarget = arisetarget
+		retry3times(args, dataRemoteEvent)
+		-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+	end)
+end
+function dom1()
+	local args = {
+		[1] = {
+			[1] = {
+				["Event"] = "PunchAttack",
+				["Enemy"] = closestEnemyMarker.Name,
+			},
+			[2] = "\4"
+		}
+	}
+
+	game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+
+end
+function attemptcapture()
+	local args = {
+		[1] = {
+			[1] = {
+				["Event"] = "EnemyCapture",
+				["Enemy"] = getClosestEnemy().Name
+			},
+			[2] = "\4"
+		}
+	}
+
+	game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+
+end
+function CreateInstance(cls,props)
+	local inst = Instance.new(cls)
+	for i,v in pairs(props) do
+		inst[i] = v
+	end
+	return inst
+end
+function attemptdestroy()
+	local args = {
+		[1] = {
+			[1] = {
+				["Event"] = "EnemyDestroy",
+				["Enemy"] = getClosestEnemy().Name
+			},
+			[2] = "\4"
+		}
+	}
+
+	game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+end
+
+function getClosestEnemyDistance(alive: boolean)
+	local closest = getClosestEnemy(alive)
+	if closest then
+		local char = player.Character
+		local distance = math.abs((char.HumanoidRootPart.Position - closest.HumanoidRootPart.Position).Magnitude)
+		return distance
+	end
+	return math.huge
+end
+
+
+
+function shortenNumber(num)
+	local suffixes = {
+		[0] = "",
+		[1] = "K",
+		[2] = "M",
+		[3] = "B",
+		[4] = "T",
+		[5] = "Qa", -- Quadrillion
+		[6] = "Qi", -- Quintillion
+		[7] = "Sx", -- Sextillion
+		[8] = "Sp", -- Septillion
+		[9] = "Oc", -- Octillion
+		[10] = "No", -- Nonillion
+		[11] = "D"  -- Decillion
+	}
+	if num < 1000 then
+		return tostring(num) -- No need to shorten small numbers
+	end
+
+	local magnitude = math.floor(math.log(num, 1000)) -- Get the suffix index
+	local shortValue = num / (1000 ^ magnitude) -- Scale down the number
+
+	return string.format("%.2f%s", shortValue, suffixes[magnitude] or "?")
+end
+
+
+function toggleEsp()
+	local checkForEsp = game:GetService("CoreGui"):FindFirstChild("mobEsp")
+	if checkForEsp then checkForEsp:Destroy() espCon:Disconnect() espCon2:Disconnect() return end
+	local new = Instance.new("ScreenGui", game:GetService("CoreGui"))
+	new.Name = "mobEsp"
+
+	local stuff = {}
+	local format = "%s, lvl. %i [%s], %s"
+	local function doVOLD(v)
+		local name = getName(v)
+		local billboard = Instance.new("BillboardGui", new)
+		billboard.Adornee = v.HumanoidRootPart
+		billboard.AlwaysOnTop = true
+		billboard.Size = UDim2.new(10, 0, 5, 0)
+		local TextLabel = CreateInstance('TextLabel',{Font=Enum.Font.PatrickHand,FontSize=Enum.FontSize.Size14,Text='Label',TextColor3=Color3.new(0.847761, 0.234409, 0.244312),TextScaled=true,TextSize=14,TextStrokeColor3=Color3.new(0, 0, 0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Center,TextYAlignment=Enum.TextYAlignment.Center,Active=false,AnchorPoint=Vector2.new(0, 0),BackgroundColor3=Color3.new(1, 1, 1),BackgroundTransparency=1,BorderColor3=Color3.new(0, 0, 0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0, 0, 0, 0),Rotation=0,Selectable=false,Size=UDim2.new(1, 0, 1, 0),SizeConstraint=Enum.SizeConstraint.RelativeXY,Visible=true,ZIndex=1,Name='TextLabel',Parent = billboard})
+		TextLabel.Text = name
+	end
+	local function dov(v)
+		local hp = v:GetAttribute("HP")
+		local id = v:GetAttribute("Id")
+		local scale = v:GetAttribute("Scale")
+		local maxhp = v:GetAttribute("MaxHP")
+		local level = v:GetAttribute("Level")
+		if hp and id and scale and level then
+			local baseSize = 18
+			local tableprep = {}
+			local otherside 
+			local name = nil -- getName(v)
+
+			if clientpath:FindFirstChild(v.Name) then
+				name = getName(clientpath[v.Name])
+			else
+				name = "UNKNOWN"
+			end
+			local billboard = Instance.new("BillboardGui", new)
+			billboard.Adornee = v
+			billboard.AlwaysOnTop = true
+
+			local TextLabel = CreateInstance('TextLabel',{Font=Enum.Font.PatrickHand,FontSize=Enum.FontSize.Size14,Text='Label',TextColor3=Color3.new(0, 0.919768, 0.370001),TextScaled=true,TextSize=14,TextStrokeColor3=Color3.new(0, 0, 0),TextStrokeTransparency=1,TextTransparency=0,TextWrapped=true,TextXAlignment=Enum.TextXAlignment.Center,TextYAlignment=Enum.TextYAlignment.Center,Active=false,AnchorPoint=Vector2.new(0, 0),BackgroundColor3=Color3.new(1, 1, 1),BackgroundTransparency=1,BorderColor3=Color3.new(0, 0, 0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0, 0, 0, 0),Rotation=0,Selectable=false,Size=UDim2.new(1, 0, 1, 0),SizeConstraint=Enum.SizeConstraint.RelativeXY,Visible=true,ZIndex=1,Name='TextLabel',Parent = billboard})
+			if hp>=espthreshold then
+				TextLabel.TextColor3 = Color3.fromRGB(205, 8, 0)
+				baseSize = 27
+			end
+			billboard.Size = UDim2.new(baseSize, 0, baseSize/1.35, 0)
+			tableprep.level = level
+			tableprep.hp = shortenNumber(hp)
+			tableprep.textlabel = TextLabel
+			TextLabel.Text = string.format(format, name, level, tableprep.hp, getRankWithId(id))
+
+			stuff[v.Name] = tableprep
+		end
+	end
+	espCon2 = clientpath.ChildAdded:Connect(function(v)
+		if stuff[v.Name] then
+			local sss = stuff[v.Name]
+			sss.textlabel.Text = string.format(format, getName(v), sss.level, sss.hp)
+		end
+	end)
+	for _, v in pairs(newclientpath:GetDescendants()) do
+		dov(v)
+	end
+	espCon = newclientpath.DescendantAdded:Connect(function(v)
+		dov(v)
+	end)
+
+end
+
+function sendNotification(text, duration)
+	duration = duration or 3
+	game:GetService("StarterGui"):SetCore("SendNotification", {
+		Title = "Arise Crossover [script]";
+		Text = text;
+		Duration = duration;
+	})
+
+end
+
+function tpToDungeon()
+	local dungeonPath = workspace.__Main.__Dungeon
+	teleport(dungeonPath:WaitForChild("Dungeon", 5).CFrame)
+end
+
+function getName(character)
+	return character.HealthBar.Main.Title.Text
+end
+
+function teleport(cf)
+	task.spawn(function()
+		for i = 1, 30, 1 do
+			game:GetService("RunService").Stepped:Wait()
+			player.Character.HumanoidRootPart.CFrame = CFrame.new(cf.Position)
+		end
+	end)
+end
+
+local Players = game:GetService("Players")
+
+function getClosestPlayerByName(prefix)
+	local bestMatch = nil
+	local shortestDifference = math.huge
+
+	prefix = prefix:lower() -- Case-insensitive comparison
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local username = player.Name:lower()
+		local displayName = player.DisplayName:lower()
+
+		-- Function to check if the name matches the prefix
+		local function checkMatch(name)
+			if name:sub(1, #prefix) == prefix then
+				local difference = #name - #prefix -- Smaller difference = closer match
+				if difference < shortestDifference then
+					shortestDifference = difference
+					bestMatch = player
+				end
+			end
+		end
+
+		checkMatch(username)
+		checkMatch(displayName)
+	end
+
+	return bestMatch
+end
+
+function buyticketdungeon()
+	local args = {
+		[1] = {
+			[1] = {
+				["Type"] = "Gems",
+				["Event"] = "DungeonAction",
+				["Action"] = "BuyTicket"
+			},
+			[2] = "\t"
+		}
+	}
+
+	-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+	retry3times(args, dataRemoteEvent)
+
+end
+
+function autodungeon()
+	if game.PlaceId == maingameid then
+		buyticketdungeon()
+		syn.queue_on_teleport(string.format("loadstring(game:HttpGet(%s))()", sourcecode))
+		task.wait(1)
+		joinDungeon()
+		
+	end
+end
+
+function commands(cmd: string)
+	cmd = cmd:lower()
+	if string.sub(cmd, 1, 5) == "goto " then
+		local name = string.sub(cmd, 6)
+		local getIt = getClosestEnemyWithName(name, true)
+		if getIt then
+			teleport(getIt:GetPivot())
+		else
+
+		end
+	end
+	if string.sub(cmd, 1, 5) == "farm " then
+		if farming == false then
+			local name = string.sub(cmd, 6)
+			local getIt = getClosestEnemyWithName(name, true)
+			if getIt then
+				farming = true
+				teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+				task.spawn(function()
+					repeat task.wait(0.5) 
+						if not getIt or not isAlive(getIt) then
+							getIt = getClosestEnemyWithName(name, true)
+							if getIt then
+								if _G.actionmode == "destroy" then
+									for i = 1, 3, 1 do
+
+										attemptdestroy()
+										task.wait(0.3)
+									end
+								end
+								teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							end
+						end
+					until farming == false
+				end)
+			else
+
+			end
+		end
+	end
+	if cmd == "stopfarm" then
+		farming = false
+	end
+	if string.sub(cmd, 1, 11) == "playergoto " then
+		local name = string.sub(cmd, 12)
+		local player = getClosestPlayerByName(name)
+		if player then
+			teleport(player.Character:GetPivot())
+		end
+	end
+
+	if string.sub(cmd, 1, 15) == "esphpthreshold " then
+		local num = tonumber(string.sub(cmd, 16))
+		espthreshold = num
+	end
+	if string.sub(cmd, 1, 15) == "dungeonruneadd " then
+		local rune = tostring(string.sub(cmd, 16))
+		local itempath = player.leaderstats.Inventory.Items
+		
+		local bestMatch = nil
+		local shortestDifference = math.huge  -- Start with a very large number
+
+		local function checkMatch(name)
+			if name:sub(1, #rune):lower() == rune then  -- Check if it starts with "rune"
+				local difference = #name - #rune  -- Smaller difference = closer match
+				if difference < shortestDifference then
+					shortestDifference = difference
+					bestMatch = name  -- Store the best match
+				end
+			end
+		end
+
+		-- Loop through all items and find the closest match
+		for _, v in pairs(itempath:GetChildren()) do
+			checkMatch(v.Name)
+		end
+
+		-- Use the best match found
+		if bestMatch then
+			table.insert(runestoadd, bestMatch)
+		else
+			table.insert(runestoadd, rune)  -- If no match is found, use the original input
+		end
+		notify((bestMatch and "Added Rune: ") or ("Rune Add Error"), bestMatch or "Rune Not Found", (bestMatch and 5) or (3))
+	end
+	if cmd == "cleardungeon" then
+		local getIt = getClosestEnemyServer(true)
+		if getIt then
+			farming = true
+			teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+			task.spawn(function()
+				repeat task.wait(0.4) 
+					if not getIt or not checkIfAliveServer(getIt) then
+						getIt = getClosestEnemyServer(true)
+						if getIt then
+							if _G.actionmode == "destroy" then
+								for i = 1, 3, 1 do
+
+									attemptdestroy()
+									task.wait(0.3)
+								end
+							end
+							teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+						end
+					end
+				until farming == false
+			end)
+		else
+
+		end
+	end
+	if cmd == "tpberu" then
+		teleport(CFrame.new(3834, 60, 3061))
+	end
+	if cmd == "togglemobesp" then
+		toggleEsp()
+	end
+	if cmd == "togglem1" then
+		autom1 = not autom1
+	end
+	if cmd == "toggleaction" then
+		autoaction = not autoaction
+	end
+	if cmd == "toggleautoarise" then
+		autoarise = not autoarise
+	end
+	if cmd == "tpdungeon" then
+		tpToDungeon()
+	end
+	if cmd == "changeaction" then
+		if _G.actionmode == "arise" then
+			_G.actionmode = "destroy"
+		else
+			_G.actionmode = "arise"
+		end
+		notify("Action Type: ", _G.actionmode, 3)
+	end
+	if cmd == "joindungeon" then
+		joinDungeon()
+	end
+	if cmd == "dungeonbuyticket" then
+		buyticketdungeon()
+	end
+	if cmd == "infiniteyield" then
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+	end
+	if cmd == "asc_serverhop" then
+		serverhop("Asc")
+	end
+	if cmd == "desc_serverhop" then
+		serverhop("Desc")
+	end
+	if cmd == "autodungeon" then
+		autodungeon()
+		writefile('autodungeon.txt', "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
+	end
+end
+
+
+if game.PlaceId == maingameid then
+	if isfile('autodungeon.txt') then
+		task.delay(1, autodungeon)
+	end
+else
+	if isfile('autodungeon.txt') then
+		commands("cleardungeon")
+	end
+end
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/secret%20cmd%20bar"))().new(commands, listOfCommands)
+_G.executearisegame = true
+game:GetService("UserInputService").InputBegan:Connect(function(inp, gps)
+	if gps then return end
+	if inp.KeyCode == Enum.KeyCode.T then
+		callAttack()
+	end
+end)
+
+
+
+task.spawn(function()
+	while task.wait(0.2) do
+		if closestEnemyMarker and closestEnemyDistance<=40 and isAlive(closestEnemyMarker) then
+			if autom1 == true then
+				dom1()
+			end
+			if autoarise == true then
+				if ariseattacking == false then
+					ariseattacking = true
+					callAttack()
+				end
+
+			end
+
+		else
+			ariseattacking = false
+		end	
+	end
+end)
+while task.wait(0.3) do
+	closestEnemyDistance = getClosestEnemyDistance()
+	closestEnemyMarker = getClosestEnemy()
+	if closestEnemyDistance<=14 and _G.actionmode == "arise" then
+		if autoaction == true then
+			if not isAlive(closestEnemyMarker) then
+				if _G.actionmode == "arise" then
+					attemptcapture()
+				end
+			end
+		end
+
+	elseif closestEnemyDistance <= 30 and _G.actionmode == "destroy" and autoaction == true then
+		for i = 1, 3, 1 do
+			if not isAlive(closestEnemyMarker) then
+				attemptdestroy()
+			end
+		end
+	end
+end
