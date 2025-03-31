@@ -593,7 +593,8 @@ end
 function autodungeon()
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
-		syn.queue_on_teleport(string.format("loadstring(game:HttpGet(%s))()", sourcecode))
+		local qon = queue_on_teleport or syn.queue_on_teleport
+		qon("loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover'))()")
 		task.wait(1)
 		joinDungeon()
 		
