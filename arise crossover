@@ -17,6 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
+local autodungeonfilename = "autodungeon.txt"
 
 if not game:IsLoaded() then
 	game.Loaded:Wait()
@@ -760,18 +761,23 @@ function commands(cmd: string)
 	end
 	if cmd == "autodungeon" then
 		autodungeon()
-		writefile('autodungeon.txt', "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
+		writefile(autodungeonfilename, "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
+	end
+	if cmd == "stopautodungeon" then
+		if isfile(autodungeonfilename) then
+			delfile(autodungeonfilename)
+		end
 	end
 end
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/secret%20cmd%20bar"))().new(commands, listOfCommands)
 
 if game.PlaceId == maingameid then
-	if isfile('autodungeon.txt') then
+	if isfile(autodungeonfilename) then
 		task.delay(1, autodungeon)
 	end
 else
-	if isfile('autodungeon.txt') then
+	if isfile(autodungeonfilename) then
 		repeat task.wait(.1) until getClosestEnemyServer(true)
 		commands("cleardungeon")
 		_G.actionmode = "destroy"
