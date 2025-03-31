@@ -14,7 +14,7 @@ toggleaction
 toggleactiontype
 ]]
 
-local sourcecode = "https://githubcode"
+local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
 
