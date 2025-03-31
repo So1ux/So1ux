@@ -766,6 +766,7 @@ if game.PlaceId == maingameid then
 else
 	if isfile('autodungeon.txt') then
 		commands("cleardungeon")
+		_G.actionmode = "destroy"
 	end
 end
 
