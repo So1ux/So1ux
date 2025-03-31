@@ -45,6 +45,8 @@ local listOfCommands = {
 	"cleardungeon";
 	"autodungeon";
 	"stopautodungeon";
+	"tpwalk";
+	"untpwalk";
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
@@ -56,6 +58,7 @@ local player = game:GetService("Players").LocalPlayer
 local petFolder = game:GetService("Players").LocalPlayer:WaitForChild("leaderstats").Inventory:WaitForChild("Pets")
 local petFolder_Workspace = workspace.__Main:WaitForChild("__Pets"):WaitForChild(tostring(player.UserId))
 local closestEnemyDistance = math.huge
+local Players = game:GetService("Players")
 
 local autom1 = true
 local autoaction = true
@@ -63,12 +66,14 @@ local autoarise = true
 local espCon = nil
 local espCon2 = nil
 local farming = false
+local tpwalk = false
 local closestEnemyMarker = nil
 local currentAriseTarget = nil
 local dataRemoteEvent = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
 local runestoadd = {}
 local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 local qon = queue_on_teleport or syn.queue_on_teleport
+local tpwalkspeed = 0
 
 local espthreshold = math.huge
 
@@ -155,7 +160,7 @@ function getClosestEnemyServer(onlyIsAlive: boolean)
 	local closestEnemy = nil
 	local shortestDistance = math.huge
 	local character = player.Character
-	
+
 	if not character or not character:FindFirstChild("HumanoidRootPart") then
 		return nil
 	end
@@ -545,7 +550,7 @@ function teleport(cf)
 	end)
 end
 
-local Players = game:GetService("Players")
+
 
 function getClosestPlayerByName(prefix)
 	local bestMatch = nil
@@ -599,11 +604,11 @@ end
 function autodungeon()
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
-		
+
 		queueexecution()
 		task.wait(1)
 		joinDungeon()
-		
+
 	end
 end
 
@@ -657,7 +662,14 @@ function commands(cmd: string)
 			teleport(player.Character:GetPivot())
 		end
 	end
-
+	if string.sub(cmd, 1, 7) == "tpwalk " then
+		local w = tonumber(string.sub(cmd, 8))
+		if w then
+			tpwalk = true
+			tpwalkspeed = w
+		end
+	end
+	
 	if string.sub(cmd, 1, 15) == "esphpthreshold " then
 		local num = tonumber(string.sub(cmd, 16))
 		espthreshold = num
@@ -665,7 +677,7 @@ function commands(cmd: string)
 	if string.sub(cmd, 1, 15) == "dungeonruneadd " then
 		local rune = tostring(string.sub(cmd, 16))
 		local itempath = player.leaderstats.Inventory.Items
-		
+
 		local bestMatch = nil
 		local shortestDifference = math.huge  -- Start with a very large number
 
@@ -691,6 +703,10 @@ function commands(cmd: string)
 			table.insert(runestoadd, rune)  -- If no match is found, use the original input
 		end
 		notify((bestMatch and "Added Rune: ") or ("Rune Add Error"), bestMatch or "Rune Not Found", (bestMatch and 5) or (3))
+	end
+	if cmd == "untpwalk" then
+		tpwalk = false
+		tpwalkspeed = 0
 	end
 	if cmd == "cleardungeon" then
 		local getIt = getClosestEnemyServer(true)
@@ -795,6 +811,17 @@ game:GetService("UserInputService").InputBegan:Connect(function(inp, gps)
 end)
 
 
+game:GetService("RunService").Heartbeat:Connect(function(delta)
+	if tpwalk then
+		pcall(function()
+			local char = player.Character
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum.MoveDirection.Magnitude>0 then
+				char:TranslateBy(hum.MoveDirection * tpwalkspeed * delta * 10)
+			end
+		end)
+	end
+end)
 
 task.spawn(function()
 	while task.wait(0.2) do
