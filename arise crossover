@@ -70,7 +70,7 @@ local tpwalk = false
 local closestEnemyMarker = nil
 local currentAriseTarget = nil
 local dataRemoteEvent = game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
-local runestoadd = {"DgRankUpRune"}
+local runestoadd = {}
 local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 local qon = queue_on_teleport or syn.queue_on_teleport
 local tpwalkspeed = 0
@@ -608,7 +608,14 @@ function autodungeon()
 		queueexecution()
 		task.wait(1)
 		joinDungeon()
+	else
+		if #newclientpath:GetChildren()<=0 then
+			buyticketdungeon()
 
+			queueexecution()
+			task.wait(1)
+			joinDungeon()
+		end
 	end
 end
 
@@ -825,6 +832,11 @@ end)
 
 task.spawn(function()
 	while task.wait(0.2) do
+		if game.PlaceId~=maingameid then
+			if #newclientpath:GetChildren()<=0 then
+				autodungeon()
+			end
+		end
 		if closestEnemyMarker and closestEnemyDistance<=40 and isAlive(closestEnemyMarker) then
 			if autom1 == true then
 				dom1()
