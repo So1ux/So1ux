@@ -609,7 +609,7 @@ function autodungeon()
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
 		queueexecution()
-		if #runestoadd<=0 then
+		if #runestoadd<=0 and v then
 			runestoadd = v
 		end
 		task.wait(1)
@@ -617,7 +617,7 @@ function autodungeon()
 	else
 		if #newclientpath:GetChildren()<=0 then
 			buyticketdungeon()
-			if #runestoadd<=0 then
+			if #runestoadd<=0 and v then
 				runestoadd = v
 			end
 			task.wait(1)
