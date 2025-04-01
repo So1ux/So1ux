@@ -602,15 +602,24 @@ function queueexecution()
 end
 
 function autodungeon()
+	local v = (isfile(autodungeonfilename) and readfile(autodungeonfilename))
+	if v then
+		v = JSONDecode(v) 
+	end
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
-
 		queueexecution()
+		if #runestoadd<=0 then
+			runestoadd = v
+		end
 		task.wait(1)
 		joinDungeon()
 	else
 		if #newclientpath:GetChildren()<=0 then
 			buyticketdungeon()
+			if #runestoadd<=0 then
+				runestoadd = v
+			end
 			task.wait(1)
 			joinDungeon()
 		end
@@ -674,7 +683,7 @@ function commands(cmd: string)
 			tpwalkspeed = w
 		end
 	end
-	
+
 	if string.sub(cmd, 1, 15) == "esphpthreshold " then
 		local num = tonumber(string.sub(cmd, 16))
 		espthreshold = num
@@ -827,6 +836,13 @@ game:GetService("RunService").Heartbeat:Connect(function(delta)
 		end)
 	end
 end)
+
+function JSONEncode(x)
+	return game:GetService("HttpService"):JSONEncode(x)
+end
+function JSONDecode(x)
+	return game:GetService("HttpService"):JSONDecode(x)
+end
 
 task.spawn(function()
 	while task.wait(0.2) do
