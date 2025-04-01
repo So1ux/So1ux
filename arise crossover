@@ -791,7 +791,7 @@ function commands(cmd: string)
 	end
 	if cmd == "autodungeon" then
 		autodungeon()
-		writefile(autodungeonfilename, "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
+		writefile(autodungeonfilename, "[]")
 	end
 	if cmd == "stopautodungeon" then
 		if isfile(autodungeonfilename) then
