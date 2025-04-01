@@ -55,7 +55,7 @@ if _G.executearisegame then return end
 local clientpath = workspace:WaitForChild("__Main"):WaitForChild("__Enemies"):WaitForChild("Client")
 local newclientpath = workspace.__Main.__Enemies:WaitForChild("Server")
 local player = game:GetService("Players").LocalPlayer
-local petFolder = game:GetService("Players").LocalPlayer:WaitForChild("leaderstats").Inventory:WaitForChild("Pets")
+local petFolder = game:GetService("Players").LocalPlayer:WaitForChild("leaderstats"):WaitForChild("Inventory"):WaitForChild("Pets")
 local petFolder_Workspace = workspace.__Main:WaitForChild("__Pets"):WaitForChild(tostring(player.UserId))
 local closestEnemyDistance = math.huge
 local Players = game:GetService("Players")
@@ -611,8 +611,6 @@ function autodungeon()
 	else
 		if #newclientpath:GetChildren()<=0 then
 			buyticketdungeon()
-
-			queueexecution()
 			task.wait(1)
 			joinDungeon()
 		end
