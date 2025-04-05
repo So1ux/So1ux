@@ -611,7 +611,7 @@ function autodungeon()
 		buyticketdungeon()
 		queueexecution()
 		if #runestoadd<=0 then
-			runestoadd = v
+			runestoadd = v or runestoadd
 		end
 		task.wait(1)
 		joinDungeon()
@@ -619,7 +619,7 @@ function autodungeon()
 		if #newclientpath:GetChildren()<=0 then
 			buyticketdungeon()
 			if #runestoadd<=0 then
-				runestoadd = v
+				runestoadd = v or runestoadd
 			end
 			task.wait(1)
 			joinDungeon()
