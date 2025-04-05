@@ -47,8 +47,7 @@ local listOfCommands = {
 	"stopautodungeon";
 	"tpwalk";
 	"untpwalk";
-	"farmanything_server";
-	"farmanything_client";
+	"farmanything_server"
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
@@ -845,7 +844,7 @@ function commands(cmd: string)
 	end
 	if cmd == "autodungeon" then
 		autodungeon()
-		writefile(autodungeonfilename, "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
+		writefile(autodungeonfilename, "[]")
 	end
 	if cmd == "stopautodungeon" then
 		if isfile(autodungeonfilename) then
