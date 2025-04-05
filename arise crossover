@@ -17,6 +17,8 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
+local VERSION = 1.002
+
 local autodungeonfilename = "autodungeon.txt"
 
 if not game:IsLoaded() then
@@ -920,6 +922,9 @@ task.spawn(function()
 			ariseattacking = false
 		end	
 	end
+end)
+task.delay(2, function()
+	notify("Cynx's Arise Script", string.format("VERSION: %s", VERSION), 5)
 end)
 while task.wait(0.3) do
 	closestEnemyDistance = getClosestEnemyDistance()
