@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.013"
+local VERSION = "1.014"
 
 local autodungeonfilename = "autodungeon.txt"
 local configfilename = "ariseconfig.txt"
@@ -948,7 +948,13 @@ if game.PlaceId == maingameid then
 			local defaults = {
 				["bruteautofarm"] = false;
 			}
-			writefile(configfilename, JSONEncode(defaults))
+			task.delay(.2, function()
+				if writefile then
+					writefile(configfilename, JSONEncode(defaults))
+				else
+					notify("error", "write file func not here?")
+				end
+			end)
 		end
 		queueexecution()
 	end
