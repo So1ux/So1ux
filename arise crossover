@@ -17,10 +17,10 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.012"
+local VERSION = "1.013"
 
 local autodungeonfilename = "autodungeon.txt"
-local configfilename = "arise_config.txt"
+local configfilename = "ariseconfig.txt"
 
 if not game:IsLoaded() then
 	game.Loaded:Wait()
