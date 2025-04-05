@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = 1.002
+local VERSION = "1.003"
 
 local autodungeonfilename = "autodungeon.txt"
 
@@ -49,7 +49,9 @@ local listOfCommands = {
 	"stopautodungeon";
 	"tpwalk";
 	"untpwalk";
-	"farmanything_server"
+	"farmanything_server";
+	"farmanything_client";
+	"farmbrutesonly_server"
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
@@ -176,7 +178,7 @@ local hp = v:GetAttribute("HP")
 		local maxhp = v:GetAttribute("MaxHP")
 		local level = v:GetAttribute("Level")
 ]]
-	for _, enemy in pairs(newclientpath:GetChildren()) do
+	for _, enemy in pairs(newclientpath:GetDescendants()) do
 		if onlyIsAlive then
 			if checkIfAliveServer(enemy) then
 				local distance = (enemy.Position - playerHRP.Position).Magnitude
@@ -184,6 +186,48 @@ local hp = v:GetAttribute("HP")
 				if distance < shortestDistance then
 					shortestDistance = distance
 					closestEnemy = enemy
+				end
+			end
+		else
+			local distance = (enemy.Position - playerHRP.Position).Magnitude
+
+			if distance < shortestDistance then
+				shortestDistance = distance
+				closestEnemy = enemy
+			end
+		end
+	end
+	return closestEnemy
+end
+
+function getClosestEnemyBruteServer(onlyIsAlive)
+	local closestEnemy = nil
+	local shortestDistance = math.huge
+	local character = player.Character
+
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return nil
+	end
+
+	local playerHRP = character.HumanoidRootPart
+--[[
+local hp = v:GetAttribute("HP")
+		local id = v:GetAttribute("Id") -- the last letter (the digit) is what shows the level of the enemy.
+		local scale = v:GetAttribute("Scale")
+		local maxhp = v:GetAttribute("MaxHP")
+		local level = v:GetAttribute("Level")
+]]
+	for _, enemy in pairs(newclientpath:GetDescendants()) do
+		if onlyIsAlive then
+			if checkIfAliveServer(enemy) then
+				local scale = enemy:GetAttribute("Scale")
+				if (scale and scale>1) then
+					local distance = (enemy.Position - playerHRP.Position).Magnitude
+
+					if distance < shortestDistance then
+						shortestDistance = distance
+						closestEnemy = enemy
+					end
 				end
 			end
 		else
@@ -679,6 +723,32 @@ function commands(cmd: string)
 					repeat task.wait(0.5) 
 						if not getIt or not isAlive(getIt) then
 							getIt = getClosestEnemy(true)
+							if getIt then
+								if _G.actionmode == "destroy" then
+									for i = 1, 3, 1 do
+
+										attemptdestroy()
+										task.wait(0.3)
+									end
+								end
+								teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							end
+						end
+					until farming == false
+				end)
+			end
+		end
+	end
+	if cmd == "farmbrutesonly_server" then
+		if farming == false then
+			local getIt = getClosestEnemyBruteServer(true)
+			if getIt then
+				farming = true
+				teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+				task.spawn(function()
+					repeat task.wait(0.5) 
+						if not getIt or not checkIfAliveServer(getIt) then
+							getIt = getClosestEnemyBruteServer(true)
 							if getIt then
 								if _G.actionmode == "destroy" then
 									for i = 1, 3, 1 do
