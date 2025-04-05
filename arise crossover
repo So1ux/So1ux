@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.014"
+local VERSION = "1.015"
 
 local autodungeonfilename = "autodungeon.txt"
 local configfilename = "ariseconfig.txt"
@@ -160,6 +160,13 @@ function checkIfAliveServer(data)
 		return false
 	end
 	return nil
+end
+
+function JSONEncode(x)
+	return game:GetService("HttpService"):JSONEncode(x)
+end
+function JSONDecode(x)
+	return game:GetService("HttpService"):JSONDecode(x)
 end
 
 function getClosestEnemyServer(onlyIsAlive: boolean)
@@ -991,12 +998,7 @@ game:GetService("RunService").Heartbeat:Connect(function(delta)
 	end
 end)
 
-function JSONEncode(x)
-	return game:GetService("HttpService"):JSONEncode(x)
-end
-function JSONDecode(x)
-	return game:GetService("HttpService"):JSONDecode(x)
-end
+
 function _antiafk()
 	-- credits to infinite yield
 	local Players = game:GetService("Players")
