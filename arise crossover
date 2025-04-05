@@ -17,9 +17,10 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.003"
+local VERSION = "1.011"
 
 local autodungeonfilename = "autodungeon.txt"
+local configfilename = "config.txt"
 
 if not game:IsLoaded() then
 	game.Loaded:Wait()
@@ -645,7 +646,10 @@ function buyticketdungeon()
 end
 
 function queueexecution()
-	qon("loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover'))()")
+	if not getgenv().queueexec then
+		getgenv().queueexec = true
+		qon("loadstring(game:HttpGet('https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover'))()")
+	end
 end
 
 function autodungeon()
@@ -742,6 +746,7 @@ function commands(cmd: string)
 	if cmd == "farmbrutesonly_server" then
 		if farming == false then
 			local getIt = getClosestEnemyBruteServer(true)
+			
 			if getIt then
 				farming = true
 				teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
@@ -873,6 +878,7 @@ function commands(cmd: string)
 
 		end
 	end
+	
 	if cmd == "tpberu" then
 		teleport(CFrame.new(3834, 60, 3061))
 	end
@@ -930,12 +936,29 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/head
 if game.PlaceId == maingameid then
 	if isfile(autodungeonfilename) then
 		task.delay(1, autodungeon)
+	else
+		local file = (isfile(configfilename) and readfile(configfilename))
+		if file then
+			file = JSONDecode(file)
+			local isBruteAutoFarm = (file.bruteautofarm and file.bruteautofarm == true)
+			if isBruteAutoFarm then
+				commands("farmbrutesonly_server")
+			end
+		else
+			local defaults = {
+				["bruteautofarm"] = false;
+			}
+			writefile(configfilename, JSONEncode(defaults))
+		end
+		queueexecution()
 	end
 else
 	if isfile(autodungeonfilename) then
 		repeat task.wait(.1) until getClosestEnemyServer(true)
 		commands("cleardungeon")
 		_G.actionmode = "destroy"
+		queueexecution()
+	else
 		queueexecution()
 	end
 end
@@ -968,7 +991,27 @@ end
 function JSONDecode(x)
 	return game:GetService("HttpService"):JSONDecode(x)
 end
+function _antiafk()
+	-- credits to infinite yield
+	local Players = game:GetService("Players")
+	local GC = getconnections or get_signal_cons
+	if GC then
+		for i,v in pairs(GC(Players.LocalPlayer.Idled)) do
+			if v["Disable"] then
+				v["Disable"](v)
+			elseif v["Disconnect"] then
+				v["Disconnect"](v)
+			end
+		end
+	else
+		local VirtualUser = cloneref(game:GetService("VirtualUser"))
+		Players.LocalPlayer.Idled:Connect(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end
 
+end
 task.spawn(function()
 	while task.wait(0.2) do
 		if game.PlaceId~=maingameid then
@@ -995,6 +1038,7 @@ task.spawn(function()
 end)
 task.delay(2, function()
 	notify("Cynx's Arise Script", string.format("VERSION: %s", VERSION), 5)
+	_antiafk()
 end)
 while task.wait(0.3) do
 	closestEnemyDistance = getClosestEnemyDistance()
