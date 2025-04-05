@@ -47,6 +47,8 @@ local listOfCommands = {
 	"stopautodungeon";
 	"tpwalk";
 	"untpwalk";
+	"farmanything_server";
+	"farmanything_client";
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
@@ -455,6 +457,18 @@ function shortenNumber(num)
 end
 
 
+local function teleport(cf)
+	task.spawn(function()
+		for i = 1, 30, 1 do
+			game:GetService("RunService").Stepped:Wait()
+			player.Character.HumanoidRootPart.CFrame = CFrame.new(cf.Position)
+		end
+	end)
+end
+
+
+
+
 function toggleEsp()
 	local checkForEsp = game:GetService("CoreGui"):FindFirstChild("mobEsp")
 	if checkForEsp then checkForEsp:Destroy() espCon:Disconnect() espCon2:Disconnect() return end
@@ -540,18 +554,6 @@ end
 function getName(character)
 	return character.HealthBar.Main.Title.Text
 end
-
-function teleport(cf)
-	task.spawn(function()
-		for i = 1, 30, 1 do
-			game:GetService("RunService").Stepped:Wait()
-			player.Character.HumanoidRootPart.CFrame = CFrame.new(cf.Position)
-		end
-	end)
-end
-
-
-
 function getClosestPlayerByName(prefix)
 	local bestMatch = nil
 	local shortestDifference = math.huge
@@ -609,7 +611,7 @@ function autodungeon()
 	if game.PlaceId == maingameid then
 		buyticketdungeon()
 		queueexecution()
-		if #runestoadd<=0 and v then
+		if #runestoadd<=0 then
 			runestoadd = v
 		end
 		task.wait(1)
@@ -617,7 +619,7 @@ function autodungeon()
 	else
 		if #newclientpath:GetChildren()<=0 then
 			buyticketdungeon()
-			if #runestoadd<=0 and v then
+			if #runestoadd<=0 then
 				runestoadd = v
 			end
 			task.wait(1)
@@ -663,6 +665,58 @@ function commands(cmd: string)
 				end)
 			else
 
+			end
+		end
+	end
+	if cmd == "farmanything_client" then
+		if farming == false then
+			local getIt = getClosestEnemy(true)
+			if getIt then
+				farming = true
+				teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+				task.spawn(function()
+					repeat task.wait(0.5) 
+						if not getIt or not isAlive(getIt) then
+							getIt = getClosestEnemy(true)
+							if getIt then
+								if _G.actionmode == "destroy" then
+									for i = 1, 3, 1 do
+
+										attemptdestroy()
+										task.wait(0.3)
+									end
+								end
+								teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							end
+						end
+					until farming == false
+				end)
+			end
+		end
+	end
+	if cmd == "farmanything_server" then
+		if farming == false then
+			local getIt = getClosestEnemyServer(true)
+			if getIt then
+				farming = true
+				teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+				task.spawn(function()
+					repeat task.wait(0.5) 
+						if not getIt or not checkIfAliveServer(getIt) then
+							getIt = getClosestEnemyServer(true)
+							if getIt then
+								if _G.actionmode == "destroy" then
+									for i = 1, 3, 1 do
+
+										attemptdestroy()
+										task.wait(0.3)
+									end
+								end
+								teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							end
+						end
+					until farming == false
+				end)
 			end
 		end
 	end
@@ -791,7 +845,7 @@ function commands(cmd: string)
 	end
 	if cmd == "autodungeon" then
 		autodungeon()
-		writefile(autodungeonfilename, "[]")
+		writefile(autodungeonfilename, "DELETE IF YOU NEED TO STOP AUTO DUNGEON")
 	end
 	if cmd == "stopautodungeon" then
 		if isfile(autodungeonfilename) then
