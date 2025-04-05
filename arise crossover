@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.016"
+local VERSION = "1.017"
 
 local autodungeonfilename = "autodungeon.txt"
 local configfilename = "ariseconfig.txt"
@@ -52,7 +52,8 @@ local listOfCommands = {
 	"untpwalk";
 	"farmanything_server";
 	"farmanything_client";
-	"farmbrutesonly_server"
+	"farmbrutesonly_server";
+	"joincastle";
 }
 
 _G.actionmode = "arise" -- switch between "arise"/"destroy"
@@ -635,6 +636,21 @@ function getClosestPlayerByName(prefix)
 	return bestMatch
 end
 
+function joincastle()
+	local args = {
+		[1] = {
+			[1] = {
+				["Event"] = "JoinCastle"
+			},
+			[2] = "\n"
+		}
+	}
+	
+	retry3times(args, dataRemoteEvent)
+	-- game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
+
+end
+
 function buyticketdungeon()
 	local args = {
 		[1] = {
@@ -930,6 +946,9 @@ function commands(cmd: string)
 	if cmd == "autodungeon" then
 		autodungeon()
 		writefile(autodungeonfilename, "[]")
+	end
+	if cmd == "joincastle" then
+		joincastle()
 	end
 	if cmd == "stopautodungeon" then
 		if isfile(autodungeonfilename) then
