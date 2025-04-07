@@ -400,6 +400,10 @@ function retry3times(args, remote)
 			if selfargs[1][1].AttackType then
 				selfargs[1][2] = "\7"
 			end
+		elseif i == 5 then
+			if selfargs[1][1].AttackType then
+				selfargs[1][2] = "\5"
+			end
 		end
 		remote:FireServer(unpack(selfargs))
 	end
