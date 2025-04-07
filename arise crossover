@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.018"
+local VERSION = "1.019"
 
 local autodungeonfilename = "autodungeon.txt"
 local configfilename = "ariseconfig.txt"
@@ -773,9 +773,15 @@ function commands(cmd: string)
 	if cmd == "farmbrutesonly_server" then
 		if farming == false then
 			local getIt = nil
-
+			
 			farming = true
 			task.spawn(function()
+				local con
+				con = game:GetService("RunService").Heartbeat:Connect(function()
+					if getIt then
+						player.Character:PivotTo(getIt:GetPivot() * CFrame.new(0, -9, -1))
+					end
+				end)
 				repeat task.wait(0.5) 
 					if not getIt or not checkIfAliveServer(getIt) then
 						getIt = getClosestEnemyBruteServer(true)
@@ -784,13 +790,17 @@ function commands(cmd: string)
 								for i = 1, 3, 1 do
 
 									attemptdestroy()
-									task.wait(0.3)
+									task.wait(0.2)
 								end
 							end
-							teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							-- teleport(getIt:GetPivot() * CFrame.new(0, 0, -3))
+							
 						end
 					end
 				until farming == false
+				if con and con.Connected then
+					con:Disconnect()
+				end
 			end)
 		end
 	end
