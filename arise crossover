@@ -17,7 +17,7 @@ toggleactiontype
 local sourcecode = "https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/arise%20crossover"
 local maingameid = 87039211657390
 
-local VERSION = "1.019"
+local VERSION = "1.020"
 
 local autodungeonfilename = "autodungeon.txt"
 local configfilename = "ariseconfig.txt"
@@ -777,9 +777,16 @@ function commands(cmd: string)
 			farming = true
 			task.spawn(function()
 				local con
+				local z = nil
 				con = game:GetService("RunService").Heartbeat:Connect(function()
 					if getIt then
+						z = nil
 						player.Character:PivotTo(getIt:GetPivot() * CFrame.new(0, -9, -1))
+					else
+						if not z then z = player.Character:GetPivot()
+						else
+							player.Character:PivotTo(z * CFrame.new(0, -11, 1))
+						end
 					end
 				end)
 				repeat task.wait(0.5) 
