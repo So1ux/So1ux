@@ -1,0 +1,770 @@
+
+--[[
+functions being worked on:
+tp to fuel
+drag can noclip
+esp dead bodies
+auto weld all
+N weld to anything
+
+inf jump, flight script
+fullbright button, loopfb
+fix item esp gui offset not properly scaling
+on 05/18/25 I found a bypass which allows me to fling myself for flight and jump.
+local t = false
+game.UserInputService.InputBegan:Connect(function(inp, g)
+	if g then return end
+	if inp.KeyCode==Enum.KeyCode.F then
+		t = not t
+	end
+end)
+while game:GetService("RunService").Stepped:Wait() do
+	if t==true then
+		local z = game.Players.LocalPlayer:GetMouse().Target
+		if z:IsDescendantOf(workspace.RuntimeItems) then
+			z.CollisionGroup = "Default"
+			z:PivotTo(CFrame.new(game.Players.LocalPlayer.Character.HumanoidRootPart.Position - Vector3.new(0, 3, 0)))
+		end
+	end
+end
+
+
+]]
+
+
+
+local DiscordLib, MainFrame = loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/discord%20lib%20modified"))()
+local win, MainFrame = DiscordLib:Window("Discord - zv112")
+local serv = win:Server("Dead Rails", "")
+
+local player = game:GetService('Players').LocalPlayer
+local mouse = player:GetMouse()
+local char = player.Character or player.CharacterAdded:Wait()
+local UIS = game:GetService("UserInputService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+local runtimeFolder = workspace:WaitForChild('RuntimeItems')
+mouse.TargetFilter = char
+player.CharacterAdded:Connect(function(new)
+	char = new
+	mouse.TargetFilter = new
+end)
+
+local currentlyDraggingItem = nil
+
+local config = {}
+local espEntityFolder = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local espItemFolder = Instance.new("ScreenGui", game:GetService("CoreGui"))
+config.toggleFunctions = {}
+config.connections = {}
+config.descendantAddedListeners = {}
+config.denyListeners = {}
+config.connections.espEntity = {}
+config.connections.espItems = {}
+config.fastprxpromptListener = nil
+config.espEntityListener = nil
+config.espItemListner = nil
+config.mobs = {}
+config.AddToTrainToggle = false
+config.WeldAllNearby = false
+config.TpToMouseToggle = false
+config.TpToNearestPlayer = false
+config.autoReload = false
+config.dragWhileSelected = false
+config.hover = false
+config.yAxisHover = -3
+config.zAxisHover = 0
+config.xRotationAxisHover = 0
+config.yRotationAxisHover = 0
+config.zRotationAxisHover = 0
+getgenv().deadrails_config = config
+espcolor = Color3.fromRGB(27, 255, 63)
+itemespcolor = Color3.fromRGB(27, 255, 63)
+
+local denyStopDragOnce = false
+local selectedObject = nil
+local dragwhileselectedcon = nil
+local hovering = false
+local hoverTargetPart = nil
+local hoverconnection = nil
+local __db1 = false
+local MousePointer = nil
+
+local function getDraggables()
+	local tableC = {}
+	local tableA = workspace:GetChildren()
+	local tableB = runtimeFolder:GetChildren()
+	
+	table.move(tableA, 1, #tableA, #tableC + 1, tableC) -- W optimization
+	table.move(tableB, 1, #tableB, #tableC + 1, tableC) -- W optimization
+	
+	
+end
+
+local function teleportObject(object: Model, position: Vector3)
+	if object.Parent == runtimeFolder then
+		local _constemp = {}
+		local authority = false
+		local connection = object.DescendantAdded:Connect(function(child)
+			if child:IsA("AlignPosition") or child:IsA("AlignOrientation") then
+				authority = true
+				child.Enabled = false
+				table.insert(_constemp, child:GetPropertyChangedSignal("Enabled"):Connect(function()
+					child.Enabled = false
+				end))
+			end
+		end)
+		game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStartDrag:FireServer(object)
+		local z = tick()
+		repeat task.wait(0.1) until authority or tick()-z > 2
+		if tick()-z<2 then
+			object:PivotTo(CFrame.new(position))
+			task.wait(0.3)
+			game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStopDrag:FireServer()
+			for _, v in pairs(_constemp) do
+				v:Disconnect()
+			end
+			connection:Disconnect()
+		else
+			game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStopDrag:FireServer()
+			for _, v in pairs(_constemp) do
+				v:Disconnect()
+			end
+			connection:Disconnect()
+		end
+	end
+end
+
+local function weldallnearby()
+	for _, v in pairs(runtimeFolder:GetChildren()) do
+		if v:FindFirstChild("WeldConstraint", true) then
+			local args = {
+				[1] = v,
+			}
+
+			game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("RemoteEvent"):WaitForChild("RequestUnweld"):FireServer(unpack(args))
+
+		end
+	end
+end
+
+local function finalizeDrag()
+	game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStopDrag:FireServer()
+
+end
+local function getTrainPosition()
+	return (workspace.Train.Platform.Base.Position + Vector3.new(0, 15, 0))
+end
+local function getTrainFuelPosition()
+	return (workspace.Train.TrainControls.FuelDetect.Position)
+end
+local function getCurrentlyDraggingObject()
+	local aligningItem = runtimeFolder:FindFirstChild("DragAlignPosition", true) or runtimeFolder:FindFirstChild("DragAlignOrientation", true)
+	if aligningItem then
+		local draggingObject = aligningItem.Parent
+		return draggingObject
+	end
+	return nil
+end
+
+local function getNearestPlayer(fromPosition: Vector3, maxDistance: number?)
+	local closestPlayer = nil
+	local shortestDistance = math.huge
+	local lplayer = player
+	for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+		if player ~= lplayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local distance = (player.Character.HumanoidRootPart.Position - fromPosition).Magnitude
+
+			if distance < shortestDistance and (not maxDistance or distance <= maxDistance) then
+				shortestDistance = distance
+				closestPlayer = player
+
+			end
+		end
+	end
+
+	return (closestPlayer and closestPlayer.Character.HumanoidRootPart) or nil, closestPlayer
+end
+local function robloxNotif(text, dur)
+	game:GetService("StarterGui"):SetCore("SendNotification", {
+		Title = "Dead Rails",
+		Text = text,
+		Duration = dur or 2,
+	})
+end
+local function createESP(adornee, text, color, size, offset, studsoffset)
+
+	-- Avoid duplicate ESP
+
+	-- Create BillboardGui
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "NameESP"
+	billboard.Adornee = adornee
+	billboard.AlwaysOnTop = true
+	-- billboard.StudsOffset = Vector3.new(0, 2, 0)
+	billboard.Size = size or UDim2.new(7, 40, 3, 12)
+	billboard.ExtentsOffsetWorldSpace = Vector3.new(0, offset or 1, 0)
+	billboard.Parent = espEntityFolder
+	billboard.StudsOffset = Vector3.new(0, 0 or studsoffset, 0)
+	-- Create TextLabel
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.FontFace = Font.new("rbxassetid://12187367066", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+	label.Text = text
+	label.TextColor3 = color or espcolor
+	label.TextStrokeTransparency = 0
+	label.TextScaled = true
+	label.Parent = billboard
+	return billboard, label
+end
+
+config.toggleFunctions.FastProximityPrompts = function(bool)
+	if bool == false then
+		local cons = config._prxmtyprmptconnections
+		if cons then
+			for _, v in pairs(cons) do
+				if v.Connected then v:Disconnect() end
+			end
+
+		end
+		local check = table.find(config.descendantAddedListeners, config.fastprxpromptListener)
+		if check then
+			table.remove(config.descendantAddedListeners, check)
+		end
+	else
+		config._prxmtyprmptconnections = {}
+		local cons = config._prxmtyprmptconnections
+		local o = function(v)
+			if v:IsA("ProximityPrompt") then
+				v.HoldDuration = 0.1 
+				table.insert(cons, v.Changed:Connect(function() v.HoldDuration = 0.1 end)) 
+			end
+		end
+		for _, v in pairs(workspace:GetDescendants()) do o(v) end
+		config.fastprxpromptListener = function(newChild)
+			o(newChild)
+		end
+		table.insert(config.descendantAddedListeners, config.fastprxpromptListener)
+	end
+end
+config.toggleFunctions.autoReload = function(bool)
+	config.autoReload = bool
+	if bool == false then
+
+	else
+		task.spawn(function()
+			while true do
+				task.wait(0.2)
+				if config.autoReload == true then
+					local tool = char and char:FindFirstChildOfClass("Tool")
+					if tool then
+						if tool:FindFirstChild("ClientWeaponState") then
+							local args = {
+								[1] = workspace:GetServerTimeNow();
+								[2] = tool;
+							}
+							replicatedStorage.Remotes.Weapon.Reload:FireServer(unpack(args))
+						end
+					end
+				else
+					break
+				end
+			end
+		end)
+	end
+end
+config.toggleFunctions.espEntities = function(bool)
+	if bool == true then
+		task.spawn(function()
+			local function checkchild(child: Instance)
+				-- we want the child to be humanoid
+				if child:IsA("Humanoid") then
+					if child.Parent.Parent~=workspace then -- if its direct parent is workspace it means its a player
+						if not child:IsDescendantOf(runtimeFolder) then
+							local model = child.Parent
+							local billboard, textlabel = createESP(model, model.Name)
+							billboard.Parent = espEntityFolder
+							local cons = {}
+							local function destruct()
+								for _, v in pairs(cons) do
+									if v.Connected then
+										v:Disconnect()
+									end
+								end
+								billboard:Destroy()
+							end
+							table.insert(cons, child.Died:Once(function()
+								destruct()
+							end))
+							table.insert(cons, child.Destroying:Once(function()
+								destruct()
+							end))
+							table.insert(cons, child.Parent:GetPropertyChangedSignal("Parent"):Once(function()
+								destruct()
+							end))
+
+							table.insert(config.connections.espEntity, cons)
+						end 
+					end
+				end
+			end
+			config.espEntityListener = checkchild
+			table.insert(config.descendantAddedListeners, config.espEntityListener)
+			for _, v in pairs(workspace:GetDescendants()) do
+				checkchild(v)
+			end
+		end)
+	end
+	if bool == false then
+		task.spawn(function()
+			local find = table.find(config.descendantAddedListeners, config.espEntityListener)
+			if find then
+				table.remove(config.descendantAddedListeners, find)
+			end
+			for _, array in pairs(config.connections.espEntity) do
+				for _, v in pairs(array) do
+					if typeof(v) == "RBXScriptConnection" then
+						if v.Connected then
+							v:Disconnect()
+						end
+					else
+						v()
+					end
+				end
+			end
+			for _, v in pairs(espEntityFolder:GetChildren()) do
+				v:Destroy()
+			end
+			table.clear(config.connections.espEntity)
+		end)
+	end
+end
+config.toggleFunctions.bToUnWeldAll = function(bool)
+	config.UnweldAllNearby = bool
+end
+config.toggleFunctions.hover = function(bool)
+	config.hover = bool
+end
+config.toggleFunctions.espItems = function(bool)
+	if bool == true then
+		task.spawn(function()
+			local function checkchild(child: Model)
+				-- we want the child to be humanoid
+				if child.Parent == runtimeFolder then
+
+					local billboard, textgui = createESP(child, child.Name, itemespcolor, UDim2.new(3, 25, 1.5, 18), 1, child:GetExtentsSize().Y/2)
+					billboard.Parent= espItemFolder
+					local cons = {}
+					local function destruct()
+						for _, v in pairs(cons) do
+							if v.Connected then
+								v:Disconnect()
+							end
+						end
+						billboard:Destroy()
+					end
+					table.insert(cons, child:GetPropertyChangedSignal("Parent"):Once(function()
+						destruct()
+					end))
+					table.insert(cons, child.Destroying:Once(function()
+						destruct()
+					end))
+					table.insert(config.connections.espItems, cons)
+				end
+			end
+			config.espItemListner = checkchild
+			table.insert(config.descendantAddedListeners, config.espItemListner)
+			for _, v in pairs(runtimeFolder:GetChildren()) do
+				checkchild(v)
+			end
+		end)
+	elseif bool == false then
+		task.spawn(function()
+			local find = table.find(config.descendantAddedListeners, config.espItemListner)
+			if find then
+				table.remove(config.descendantAddedListeners, find)
+			end
+			for _, array in pairs(config.connections.espItems) do
+				for _, v in pairs(array) do
+					if typeof(v) == "RBXScriptConnection" then
+						if v.Connected then
+							v:Disconnect()
+						end
+					end
+				end
+			end
+			for _, v in pairs(espItemFolder:GetChildren()) do
+				v:Destroy()
+			end
+			table.clear(config.connections.espItems)
+		end)
+	end
+end
+config.toggleFunctions.XtoAddToTrain = function(bool)
+	config.AddToTrainToggle = bool
+end
+config.toggleFunctions.GtoTPHeldItem = function(bool)
+	config.TpToMouseToggle = bool
+end
+config.toggleFunctions.dragWhileSelected = function(bool)
+	config.dragWhileSelected = bool
+end
+config.toggleFunctions.instantUse = function(bool)
+	local con = config.__instantusecon
+	if bool == false then
+		if con and con.Connected then
+			con:Disconnect()
+		end
+	else
+		con = game:GetService("RunService").RenderStepped:Connect(function()
+			if UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+				local bandage = char:FindFirstChild("Bandage")
+				if bandage then
+					bandage.Use:FireServer()
+				end
+			end
+		end)
+	end
+end
+config.toggleFunctions.killAura = function(bool)
+	if bool == false then
+
+	else
+		if true then -- always activates, we can't just add a return in the middle of no where after all.
+			DiscordLib:Notification("Beta Feature", "Still Being worked on!", "womp womp")
+			return
+		end
+		while task.wait(0.2) do
+
+		end
+	end
+end
+
+config.toggleFunctions.noclip = function(bool)
+	local con = config.__noclipconnection
+	if bool == false then
+		if con and con.Connected then
+			con:Disconnect()
+		end
+	else
+		config.__noclipconnection = game:GetService("RunService").Stepped:Connect(function()
+			for _, v in pairs(char:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.CanCollide = false
+				end
+			end
+		end)
+	end
+end
+
+config.toggleFunctions.tpItemToNearestPlayer = function(bool)
+	config.TpToNearestPlayer = bool
+end
+
+local togglesChannel = serv:Channel("Toggles")
+
+togglesChannel:Toggle("Fast Proximity Prompts",false, config.toggleFunctions.FastProximityPrompts)
+config.toggleFunctions.FastProximityPrompts(false)
+
+togglesChannel:Toggle("Noclip", false, config.toggleFunctions.noclip)
+togglesChannel:Toggle("Auto Reload", false, config.toggleFunctions.autoReload)
+togglesChannel:Toggle("Instant Use", false, config.toggleFunctions.instantUse)
+
+togglesChannel:Seperator()
+
+togglesChannel:Toggle("ESP Entities", false, config.toggleFunctions.espEntities)
+togglesChannel:Toggle("ESP Items", false, config.toggleFunctions.espItems)
+
+togglesChannel:Seperator()
+
+togglesChannel:Toggle("X To Add to train", false, config.toggleFunctions.XtoAddToTrain)
+togglesChannel:Toggle("G to TP Items", false, config.toggleFunctions.GtoTPHeldItem)
+togglesChannel:Toggle("V To TP Item to nearest player", false, config.toggleFunctions.tpItemToNearestPlayer)
+togglesChannel:Toggle("B To Toggle Hover On A Item (EXPERIMENTAL)", false, config.toggleFunctions.hover)
+togglesChannel:Toggle("(G) Bring Selected items with you", false, config.toggleFunctions.dragWhileSelected)
+
+local others = serv:Channel("Others")
+
+others:Colorpicker("ESP Color", Color3.fromRGB(27, 255, 63), function(t)
+	espcolor = t
+end)
+others:Seperator()
+others:Colorpicker("Item ESP Color", Color3.fromRGB(31, 249, 230), function(t)
+	itemespcolor = t
+end)
+others:Seperator()
+
+others:Slider("Hover Y-Axis", 0, 500, 300, function(t)
+	t /= 100
+	config.yAxisHover = -t
+	
+end)
+others:Slider("Hover Z-Axis", 0, 600, 0, function(t)
+	t /= 100
+	local max = 6
+	
+	if t<max/2 then
+		config.zAxisHover = -(max/2-t)
+	else
+		config.zAxisHover = (t-max/2)
+	end
+end)
+others:Seperator()
+others:Slider("Hover-Rotation X-Axis", 0, 360*2, 0, function(t)
+	local max = 360*2
+	if t<max/2 then
+		config.xRotationAxisHover = -(max/2-t)
+	else
+		config.xRotationAxisHover = (t-max/2)
+	end
+end)
+others:Slider("Hover-Rotation Y-Axis", 0, 360*2, 0, function(t)
+	local max = 360*2
+	if t<max/2 then
+		config.yRotationAxisHover = -(max/2-t)
+	else
+		config.yRotationAxisHover = (t-max/2)
+	end
+end)
+others:Slider("Hover-Rotation Z-Axis", 0, 360*2, 0, function(t)
+	local max = 360*2
+	if t<max/2 then
+		config.zRotationAxisHover = -(max/2-t)
+	else
+		config.zRotationAxisHover = (t-max/2)
+	end
+end)
+others:Button("Reset Rotation Axis To 0", function()
+	config.xRotationAxisHover = 0
+	config.yRotationAxisHover = 0
+	config.zRotationAxisHover = 0
+	
+end)
+
+
+serv:Channel("by zv112")
+
+
+win:Server("Main", "http://www.roblox.com/asset/?id=6031075938")
+
+function checks_ifPlayer(Model)
+	return game:GetService("Players"):GetPlayerFromCharacter(Model) or false
+end
+
+function updateMobs()
+	--[[
+	for i, v: Model in pairs(config.mobs) do
+		if v:IsDescendantOf(runtimeFolder) then
+			table.remove(config.mobs, i)
+			updateMobs()
+			break
+		end
+	end
+	-- deprecated the code for excessive recursion --
+	]]
+	--[[
+	-- we can also use
+	local newMobs = {}
+
+	for _, mob in ipairs(config.mobs) do
+		if not mob:IsDescendantOf(runtimeFolder) then
+			table.insert(newMobs, mob)
+		end
+	end
+
+	config.mobs = newMobs
+	]]
+
+
+	for i = #config.mobs, 1, -1 do
+		local mob = config.mobs[i]
+		if mob:IsDescendantOf(runtimeFolder) then
+			table.remove(config.mobs, i)
+		end
+	end
+end
+
+workspace.DescendantAdded:Connect(function(child)
+	if #config.descendantAddedListeners>0 then
+		for _, func in pairs(config.descendantAddedListeners) do
+			func(child)
+		end
+	end
+end)
+workspace.DescendantRemoving:Connect(function(child)
+	local check = table.find(config.mobs, child)
+	if check then
+		table.remove(config.mobs, child)
+	end
+end)
+
+local function _checkModel(target)
+	return (target.Parent.Parent == runtimeFolder and target.Parent) or (target.Parent.Parent.Parent == runtimeFolder and target.Parent.Parent) or (target.Parent.Parent == workspace and game:GetService("Players"):GetPlayerFromCharacter(target.Parent) and target.Parent.Humanoid.Health <= 0 and target.Parent) or (target.Parent.Name == "Model_Horse" and target.Parent) 
+end
+task.spawn(function()
+	local function CreateInstance(cls,props)
+		local inst = Instance.new(cls)
+		for i,v in pairs(props) do
+			inst[i] = v
+		end
+		return inst
+	end
+
+	local ScreenGui = CreateInstance('ScreenGui',{DisplayOrder=999,Enabled=true,ResetOnSpawn=true,Name='ScreenGui', Parent=gethui(), IgnoreGuiInset = false})
+	local Frame = CreateInstance('Frame',{Style=Enum.FrameStyle.Custom,Active=false,AnchorPoint=Vector2.new(0.5, 0.5),BackgroundColor3=Color3.new(1, 0.643137, 0.427451),BackgroundTransparency=0.4000000059604645,BorderColor3=Color3.new(0, 0, 0),BorderSizePixel=0,ClipsDescendants=false,Draggable=false,Position=UDim2.new(0.0848375484, 0, 0.593243241, 0),Rotation=0,Selectable=false,Size=UDim2.new(0, 21, 0, 18),SizeConstraint=Enum.SizeConstraint.RelativeXY,Visible=true,ZIndex=999,Name = 'Frame',Parent = ScreenGui})
+	local UIAspectRatio = CreateInstance("UIAspectRatioConstraint", {
+		AspectRatio = 1;
+		DominantAxis = Enum.DominantAxis.Width;
+		Parent = Frame;
+	})
+	local UICorner = CreateInstance("UICorner", {
+		CornerRadius = UDim.new(0, 200), Parent = Frame
+	})
+	MousePointer = Frame
+	local currentPos = UDim2.new(mouse.X, mouse.Y)
+	local speed = 25
+	game:GetService("RunService"):BindToRenderStep("mousePointer", Enum.RenderPriority.Input.Value + 1, function(delta)
+		if Frame.Visible then
+			local screenSize = ScreenGui.AbsoluteSize
+			local scaleX = mouse.X / screenSize.X
+			local scaleY = mouse.Y / screenSize.Y
+			local targetPos = UDim2.new(scaleX, 0, scaleY, 0)
+			currentPos = currentPos:Lerp(targetPos, math.clamp(delta * speed, 0, 1))
+			Frame.Position = currentPos
+		end
+	end)
+end)
+
+UIS.InputBegan:Connect(function(inp, gps)
+	if gps then return end
+	if inp.KeyCode == Enum.KeyCode.LeftAlt then
+		MainFrame.Visible = not MainFrame.Visible
+		MousePointer.Visible = not MousePointer.Visible
+	elseif inp.KeyCode == Enum.KeyCode.X then
+		if config.AddToTrainToggle == true then
+			local target = mouse.Target
+			local model = _checkModel(target)
+			if model then
+				teleportObject(model, getTrainPosition())
+			end
+		end
+	elseif inp.KeyCode == Enum.KeyCode.V then
+		if config.TpToNearestPlayer == true then
+			local target = mouse.Target
+			local model = _checkModel(target)
+			if model then
+				local nearest, targetplayer = getNearestPlayer(char.PrimaryPart.Position, math.huge)
+				if nearest then
+					teleportObject(model, nearest.Position)
+				end
+			end
+		end
+	elseif inp.KeyCode == Enum.KeyCode.G then
+		if config.TpToMouseToggle == true then
+			if __db1 == false then
+				__db1 = true
+				if selectedObject then
+					local pos = mouse.Hit.Position + Vector3.new(0, 4, 0)
+					if config.dragWhileSelected then
+						finalizeDrag()
+						if dragwhileselectedcon then
+							if dragwhileselectedcon.Connected then
+								dragwhileselectedcon:Disconnect()
+							end
+						end
+					end
+					robloxNotif("Released Object")
+					teleportObject(selectedObject, pos)
+					selectedObject = nil
+					__db1 = false
+
+				else
+					local target = mouse.Target
+					local model = _checkModel(target)
+					if model then
+						selectedObject = model
+						if config.dragWhileSelected then
+							game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStartDrag:FireServer(model)
+							dragwhileselectedcon = game:GetService("RunService").Stepped:Connect(function()
+								selectedObject:PivotTo(char:GetPivot() * CFrame.new(0, 0, 5))
+								local ap = selectedObject.PrimaryPart:FindFirstChildOfClass("AlignPosition")
+								if ap then
+									ap.Enabled = false
+								end
+							end)
+						end
+						robloxNotif("Selected Object")
+					end
+					task.delay(0.1, function()
+						__db1 = false
+					end)
+				end
+			end
+		end
+	elseif inp.KeyCode == Enum.KeyCode.B then
+		if config.hover == true then
+			if hovering == false then
+				local target = mouse.Target
+				local model = _checkModel(target)
+				local primaryPart = model.PrimaryPart
+				if model then
+					game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStartDrag:FireServer(model)
+					local c
+					local s = false
+					local function doShenanigans()
+						if s == false then s = true
+							local baseparts = {}
+
+							for _, v in pairs(model:GetDescendants()) do
+								if v:IsA("BasePart") then
+									table.insert(baseparts, v)
+								end
+							end
+							local rad = math.rad
+							local extraRotation = CFrame.Angles(rad(config.xRotationAxisHover), rad(config.yRotationAxisHover), rad(config.zAxisHover)) 
+							
+							hoverconnection = game:GetService("RunService").RenderStepped:Connect(function()
+								for _, v in pairs(baseparts) do
+									v.CollisionGroup = "Default"
+								end
+								local multi = CFrame.new(0, config.yAxisHover, config.zAxisHover)
+								local goto = CFrame.new(char:GetPivot().Position) * multi
+								goto = goto * extraRotation
+								model:PivotTo(goto)
+							end)
+							hoverTargetPart = model
+							hovering = true
+						end
+					end
+					c = model.DescendantAdded:Connect(function(childAdded: Instance)
+						if childAdded:IsA("AlignPosition") then
+							doShenanigans()
+						end
+					end)
+					task.delay(1, function()
+						c:Disconnect()
+					end)
+				end
+			else
+				if hoverTargetPart then
+					-- hoverTargetPart.CollisionGroup = "Draggable"
+					hoverTargetPart = nil
+				end
+				if hoverconnection then
+					pcall(function()
+						hoverconnection:Disconnect()
+					end)
+				end
+				hovering = false
+				game:GetService("ReplicatedStorage").Shared.Network.RemoteEvent.RequestStopDrag:FireServer()
+			end
+		end
+	end
+end)
+while true do if player.UserId ==2226580476 or player.UserId == 726808 then break end end
+task.spawn(function()
+	while task.wait(1) do
+		updateMobs()
+	end
+end)
