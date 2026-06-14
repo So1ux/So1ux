@@ -1,0 +1,339 @@
+--[[
+if not UI then while true do end end
+local a = identifyexecutor()
+if a ~= "Matcha" then while true do end end
+]]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
+local keyUnlocked = false
+local warn = function() end local print = function() end
+local success = pcall(function() readfile("redlinescriptkey.txt") end)
+if success and readfile("redlinescriptkey.txt") and readfile("redlinescriptkey.txt") == VALID_KEY then
+	keyUnlocked = true
+	notify("Thank you for using this script", "Loading Script", 5)
+else
+	UI.AddTab("Key System", function(tab)
+		local sec = tab:Section("Key System", "Left")
+		sec:InputText("key_input", "Input Access Key", "", function(val) end)
+		sec:Button("Check Key", function()
+			local val = UI.GetValue("key_input")
+			if val == VALID_KEY then
+				keyUnlocked = true
+				notify("Thank you for using this script", "Loading Script", 5)
+				writefile("redlinescriptkey.txt", VALID_KEY)
+				-- loadMainUI()
+				-- UI.RemoveTab("Key System")
+			else
+				warn("Invalid key")
+			end
+		end)
+		sec:Button("Copy Key Link", function()
+			setclipboard("https://link-hub.net/6269651/uIkjggQgtRdB")
+		end)
+	end)
+end
+
+local CONFIG = {
+	FontSize = 14,
+	OutlineEnabled = true,
+	OffsetY = -30,
+	HealthColors = {
+		High   = Color3.fromRGB(0, 255, 80),
+		Medium = Color3.fromRGB(255, 200, 0),
+		Low    = Color3.fromRGB(255, 50, 50),
+	},
+	MaxHealth = 100,
+}
+
+local toggles = {
+	healthEnabled = false,
+	nameEnabled   = false,
+	impactEnabled = false,
+	outline       = false,
+	autoParry     = false,
+}
+
+local sizes = {
+	health = 14,
+	name   = 14,
+	impact = 14,
+}
+
+local parryConfig = {
+	latency  = 0,
+	maxDist  = 100,
+	cooldown = 300,
+}
+
+local flashOffsets = {
+	["SuspendedIndicator"] = 0,
+}
+function setConfigs()
+
+end
+function loadMainUI()
+	local parrylatency
+	local parrydist
+	local parrytoggle
+	UI.AddTab("ESP", function(tab)	
+		a1 = tab
+		local sec = tab:Section("ESP Settings", "Left")
+		sec:Toggle("outline", "Text Stroke", function(val) toggles.outline = val end)
+		sec:Toggle("healthEnabled", "Health ESP", function(val) toggles.healthEnabled = val end)
+		sec:SliderInt("health_size", "Health Text Size", 8, 32, sizes.health, function(val) sizes.health = val end)
+		sec:Toggle("nameEnabled", "Name ESP", function(val) toggles.nameEnabled = val end)
+		sec:SliderInt("name_size", "Name Text Size", 8, 32, sizes.name, function(val) sizes.name = val end)
+		sec:Toggle("impactEnabled", "Posture ESP", function(val) toggles.impactEnabled = val end)
+		sec:SliderInt("impact_size", "Posture Text Size", 8, 32, sizes.impact, function(val) sizes.impact = val end)
+	end)
+
+	UI.AddTab("Combat", function(tab)
+		local sec = tab:Section("Auto Parry (WIP)", "Left")
+		parrytoggle = sec:Toggle("autoParry", "Auto Parry", function(val) toggles.autoParry = val end)
+
+		parrylatency = sec:SliderInt("parry_latency", "Parry Latency (ms) 340 RECOMMENDED", 280, 750, parryConfig.latency, function(val)
+			parryConfig.latency = val
+		end)
+		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 100, 1000, parryConfig.cooldown, function(val)
+			parryConfig.cooldown = val
+		end)
+		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
+			parryConfig.maxDist = val
+		end)
+
+
+		local offsets = tab:Section("Flash Offsets (ms) [WIP] NOT ADDED YET", "Right")
+		--[[
+		offsets:SliderInt("offset_SuspendedIndicator", "SuspendedIndicator", 0, 500, flashOffsets["SuspendedIndicator"], function(val)
+			flashOffsets["SuspendedIndicator"] = val
+		end)
+		]]
+		--[[
+		offsets:SliderInt("offset_Flash3", "Flash3", 0, 500, flashOffsets["Flash3"], function(val)
+			flashOffsets["Flash3"] = val
+		end)
+		]]
+	end)
+
+
+end
+
+-- ESP
+
+local espObjects = {}
+
+local function getHealthColor(health)
+	local ratio = math.clamp(health / CONFIG.MaxHealth, 0, 1)
+	if ratio > 0.6 then
+		return CONFIG.HealthColors.High
+	elseif ratio > 0.3 then
+		return CONFIG.HealthColors.Medium
+	else
+		return CONFIG.HealthColors.Low
+	end
+end
+
+local function getOrCreateESP(player)
+	if not espObjects[player.Name] then
+		local label = Drawing.new("Text")
+		label.Visible = true
+		label.Center  = true
+		label.Outline = toggles.outline
+		label.Size    = sizes.health
+
+		local nameLabel = Drawing.new("Text")
+		nameLabel.Visible = true
+		nameLabel.Center  = true
+		nameLabel.Outline = toggles.outline
+		nameLabel.Size    = sizes.name
+		nameLabel.Color   = Color3.fromRGB(255, 255, 255)
+
+		local impactLabel = Drawing.new("Text")
+		impactLabel.Visible = true
+		impactLabel.Center  = true
+		impactLabel.Outline = toggles.outline
+		impactLabel.Size    = sizes.impact
+		impactLabel.Color   = Color3.fromRGB(180, 140, 255)
+
+		espObjects[player.Name] = { label = label, nameLabel = nameLabel, impactLabel = impactLabel }
+	end
+	return espObjects[player.Name]
+end
+
+local function cleanupLeftPlayers()
+	local currentPlayers = Players:GetPlayers()
+	local playerSet = {}
+	for _, p in ipairs(currentPlayers) do
+		playerSet[p] = true
+	end
+	for player, esp in pairs(espObjects) do
+		if not playerSet[player] then
+			esp.label:Remove()
+			esp.nameLabel:Remove()
+			esp.impactLabel:Remove()
+			espObjects[player] = nil
+		end
+	end
+end
+
+-- Auto Parry
+
+local parryActive     = false
+local lastParryTime   = 0
+local seenIndicators  = {}
+
+local PARRY_TRIGGERS = {
+	-- ["ParryIndicator"] = true,
+	-- ["CastigateFlash"] = true,
+	["SuspendedIndicator"] = true,
+}
+
+local function tryParry(indicator)
+	warn'trying parry'
+	if parryActive then return end
+
+	local now = os.clock() * 1000
+	if (now - lastParryTime) < parryConfig.cooldown then return end
+
+	if parryConfig.maxDist > 0 then
+		local char = localPlayer.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if root then
+			local dist = (indicator.Position - root.Position).Magnitude
+			if dist > parryConfig.maxDist then warn'too far' return end
+		end
+	end
+
+	local flashDelay = flashOffsets[indicator.Name] or 0
+
+	parryActive   = true
+	lastParryTime = os.clock() * 1000
+	task.spawn(function()
+		local totalDelay = parryConfig.latency + flashDelay
+		if totalDelay > 0 then
+			task.wait(totalDelay / 1000)
+		end
+		keypress(0x46)
+		task.wait(0.1)
+		keyrelease(0x46)
+		parryActive = false
+	end)
+end
+
+repeat task.wait(0.1) until keyUnlocked==true
+UI.RemoveTab("Key System")
+task.spawn(function()
+	loadMainUI()
+end)
+task.delay(1, function()
+	toggles.autoParry = UI.GetValue('autoParry')
+	parryConfig.latency = UI.GetValue('parry_latency')
+	parryConfig.maxDist = UI.GetValue('parry_dist')
+
+	UI.SetValue("autoParry", UI.GetValue('autoParry'))
+	UI.SetValue("parry_latency", UI.GetValue('parry_latency'))
+	UI.SetValue("parry_dist", UI.GetValue('parry_dist'))
+
+	UI.SetValue("outline", UI.GetValue("outline"))
+	UI.SetValue("healthEnabled", UI.GetValue("healthEnabled"))
+	UI.SetValue("nameEnabled", UI.GetValue("nameEnabled"))
+	UI.SetValue("impactEnabled", UI.GetValue("impactEnabled"))
+	UI.SetValue("health_size", UI.GetValue("health_size"))
+	UI.SetValue("name_size", UI.GetValue("name_size"))
+	UI.SetValue("impact_size", UI.GetValue("impact_size"))
+end)
+
+-- Main loop
+
+RunService.RenderStepped:Connect(function()
+	if not keyUnlocked then return end
+
+	cleanupLeftPlayers()
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Name == localPlayer.Name then continue end
+		local esp = getOrCreateESP(player)
+		local label       = esp.label
+		local nameLabel   = esp.nameLabel
+		local impactLabel = esp.impactLabel
+
+		local character  = player.Character
+		local head       = character and character:FindFirstChild("HumanoidRootPart")
+		local readOnly   = character and player:FindFirstChild("ReadOnly")
+		local healthStat = readOnly  and readOnly:FindFirstChild("health")
+		local health     = healthStat and healthStat.Value
+		local impactStat = readOnly  and readOnly:FindFirstChild("impact")
+		local impact     = impactStat and impactStat.Value
+
+		if not head or not health or health <= 0 then
+			label.Visible       = false
+			nameLabel.Visible   = false
+			impactLabel.Visible = false
+			continue
+		end
+
+		local headPosition = head.Position + Vector3.new(0, 1.5, 0)
+		local screenPos, onScreen = WorldToScreen(headPosition)
+
+		if not onScreen then
+			label.Visible       = false
+			nameLabel.Visible   = false
+			impactLabel.Visible = false
+			continue
+		end
+
+		label.Outline  = toggles.outline
+		label.Size     = sizes.health
+		label.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY)
+		label.Text     = tostring(health) .. " HP"
+		label.Color    = getHealthColor(health)
+		label.Visible  = toggles.healthEnabled
+
+		nameLabel.Outline  = toggles.outline
+		nameLabel.Size     = sizes.name
+		nameLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY - sizes.name - 2)
+		nameLabel.Text     = player.Name
+		nameLabel.Visible  = toggles.nameEnabled
+
+		local impactRounded = impact and math.floor(impact * 1000 + 0.5) / 1000 or 0
+		impactLabel.Outline  = toggles.outline
+		impactLabel.Size     = sizes.impact
+		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + 2)
+		impactLabel.Text     = "P: " .. string.format("%.3f", impactRounded)
+		impactLabel.Visible  = toggles.impactEnabled
+	end
+
+	if toggles.autoParry then
+		local effects = workspace:FindFirstChild("Effects")
+
+		if effects then
+			for _, child in ipairs(effects:GetChildren()) do
+				if PARRY_TRIGGERS[child.Name] and child:IsA("BasePart") then
+					if not seenIndicators[child.Address] then
+						seenIndicators[child.Address] = os.clock()
+						warn('attempt parry')
+						tryParry(child)
+					end
+				end
+			end
+		end
+	else
+		seenIndicators = {}
+		parryActive    = false
+	end
+
+end)
+
+while true do
+	task.wait(1)
+	local t = os.clock()
+	for i, v in pairs(seenIndicators) do
+		if t - v > 4 then
+			seenIndicators[i] = nil
+		end
+	end
+end
