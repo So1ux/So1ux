@@ -9,33 +9,10 @@ local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
 local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
-local keyUnlocked = false
+local keyUnlocked = true
 local warn = function() end local print = function() end
-local success = pcall(function() readfile("redlinescriptkey.txt") end)
-if success and readfile("redlinescriptkey.txt") and readfile("redlinescriptkey.txt") == VALID_KEY then
-	keyUnlocked = true
-	notify("Thank you for using this script", "Loading Script", 5)
-else
-	UI.AddTab("Key System", function(tab)
-		local sec = tab:Section("Key System", "Left")
-		sec:InputText("key_input", "Input Access Key", "", function(val) end)
-		sec:Button("Check Key", function()
-			local val = UI.GetValue("key_input")
-			if val == VALID_KEY then
-				keyUnlocked = true
-				notify("Thank you for using this script", "Loading Script", 5)
-				writefile("redlinescriptkey.txt", VALID_KEY)
-				-- loadMainUI()
-				-- UI.RemoveTab("Key System")
-			else
-				warn("Invalid key")
-			end
-		end)
-		sec:Button("Copy Key Link", function()
-			setclipboard("https://link-hub.net/6269651/uIkjggQgtRdB")
-		end)
-	end)
-end
+
+
 
 local CONFIG = {
 	FontSize = 14,
@@ -90,8 +67,8 @@ function loadMainUI()
 	sizes.impact = UI.GetValue('impact_size')
 	toggles.impactEnabled = UI.GetValue('impactEnabled')
 	CONFIG.OutlineEnabled = UI.GetValue('outline')
-	
-	
+
+
 	UI.AddTab("ESP", function(tab)	
 		a1 = tab
 		local sec = tab:Section("ESP Settings", "Left")
@@ -153,6 +130,7 @@ end
 local function getOrCreateESP(player)
 	if not espObjects[player.Name] then
 		local label = Drawing.new("Text")
+
 		label.Visible = true
 		label.Center  = true
 		label.Outline = toggles.outline
