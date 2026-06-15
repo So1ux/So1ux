@@ -10,9 +10,7 @@ local camera = workspace.CurrentCamera
 
 local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
 local keyUnlocked = true
-local warn = function() end local print = function() end
-
-
+-- local warn = function() end local print = function() end
 
 local CONFIG = {
 	FontSize = 14,
@@ -56,18 +54,18 @@ function loadMainUI()
 	local parrylatency
 	local parrydist
 	local parrytoggle
-	toggles.autoParry = UI.GetValue('autoParry')
-	parryConfig.latency = UI.GetValue('parry_latency')
-	parryConfig.maxDist = UI.GetValue('parry_dist')
-	toggles.nameEnabled = UI.GetValue('nameEnabled')
-	parryConfig.cooldown = UI.GetValue('parry_cooldown')
-	toggles.healthEnabled = UI.GetValue('healthEnabled')
-	sizes.health = UI.GetValue('health_size')
-	sizes.name = UI.GetValue('name_size')
-	sizes.impact = UI.GetValue('impact_size')
-	toggles.impactEnabled = UI.GetValue('impactEnabled')
-	CONFIG.OutlineEnabled = UI.GetValue('outline')
-
+toggles.autoParry = UI.GetValue('autoParry') or false
+	parryConfig.latency = UI.GetValue('parry_latency') or 280
+	parryConfig.maxDist = UI.GetValue('parry_dist') or 800
+	toggles.nameEnabled = UI.GetValue('nameEnabled') or false
+	parryConfig.cooldown = UI.GetValue('parry_cooldown') or 100
+	toggles.healthEnabled = UI.GetValue('healthEnabled') or false
+	sizes.health = UI.GetValue('health_size') or 14
+	sizes.name = UI.GetValue('name_size') or 14
+	sizes.impact = UI.GetValue('impact_size') or 14
+	toggles.impactEnabled = UI.GetValue('impactEnabled') or false
+	toggles.outline = UI.GetValue('outline') or false
+	
 
 	UI.AddTab("ESP", function(tab)	
 		a1 = tab
