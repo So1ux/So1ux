@@ -79,6 +79,19 @@ function loadMainUI()
 	local parrylatency
 	local parrydist
 	local parrytoggle
+	toggles.autoParry = UI.GetValue('autoParry')
+	parryConfig.latency = UI.GetValue('parry_latency')
+	parryConfig.maxDist = UI.GetValue('parry_dist')
+	toggles.nameEnabled = UI.GetValue('nameEnabled')
+	parryConfig.cooldown = UI.GetValue('parry_cooldown')
+	toggles.healthEnabled = UI.GetValue('healthEnabled')
+	sizes.health = UI.GetValue('health_size')
+	sizes.name = UI.GetValue('name_size')
+	sizes.impact = UI.GetValue('impact_size')
+	toggles.impactEnabled = UI.GetValue('impactEnabled')
+	CONFIG.OutlineEnabled = UI.GetValue('outline')
+	
+	
 	UI.AddTab("ESP", function(tab)	
 		a1 = tab
 		local sec = tab:Section("ESP Settings", "Left")
@@ -229,23 +242,7 @@ UI.RemoveTab("Key System")
 task.spawn(function()
 	loadMainUI()
 end)
-task.delay(1, function()
-	toggles.autoParry = UI.GetValue('autoParry')
-	parryConfig.latency = UI.GetValue('parry_latency')
-	parryConfig.maxDist = UI.GetValue('parry_dist')
 
-	UI.SetValue("autoParry", UI.GetValue('autoParry'))
-	UI.SetValue("parry_latency", UI.GetValue('parry_latency'))
-	UI.SetValue("parry_dist", UI.GetValue('parry_dist'))
-
-	UI.SetValue("outline", UI.GetValue("outline"))
-	UI.SetValue("healthEnabled", UI.GetValue("healthEnabled"))
-	UI.SetValue("nameEnabled", UI.GetValue("nameEnabled"))
-	UI.SetValue("impactEnabled", UI.GetValue("impactEnabled"))
-	UI.SetValue("health_size", UI.GetValue("health_size"))
-	UI.SetValue("name_size", UI.GetValue("name_size"))
-	UI.SetValue("impact_size", UI.GetValue("impact_size"))
-end)
 
 -- Main loop
 
@@ -303,7 +300,7 @@ RunService.RenderStepped:Connect(function()
 		impactLabel.Outline  = toggles.outline
 		impactLabel.Size     = sizes.impact
 		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + 2)
-		impactLabel.Text     = "P: " .. string.format("%.3f", impactRounded)
+		impactLabel.Text     = "P: " .. string.format("%.3g", impactRounded)
 		impactLabel.Visible  = toggles.impactEnabled
 	end
 
