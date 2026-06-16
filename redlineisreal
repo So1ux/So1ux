@@ -12,6 +12,10 @@ local workspEffects = workspace:WaitForChild('Effects')
 
 local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
 local keyUnlocked = true
+local gameId = game.GameId
+local placeId = game.PlaceId
+
+local lobbyPlaceId = 94987506187454
 -- local warn = function() end local print = function() end
 
 local active = {
@@ -296,7 +300,7 @@ task.spawn(function()
 end)
 
 -- Main loop
-
+	
 RunService.RenderStepped:Connect(function()
 	if not keyUnlocked then return end
 
@@ -425,6 +429,10 @@ end)
 
 while true do
 	task.wait(1)
+	if placeId == lobbyPlaceId then
+		CONFIG.autoattackenabled = false
+		return
+	end
 	CONFIG.autoattackrange = UI.GetValue('autoclick_range')
 	CONFIG.autoattackenabled = UI.GetValue('autoclick_toggle')
 end
