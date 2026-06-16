@@ -28,6 +28,8 @@ local CONFIG = {
 		Low    = Color3.fromRGB(255, 50, 50),
 	},
 	MaxHealth = 100,
+	autoattackrange = 18,
+	autoattackenabled = false,
 }
 
 local toggles = {
@@ -36,6 +38,7 @@ local toggles = {
 	impactEnabled = false,
 	outline       = false,
 	autoParry     = false,
+	
 }
 
 local sizes = {
@@ -102,6 +105,7 @@ function loadMainUI()
 	sizes.impact = UI.GetValue('impact_size') or 16
 	toggles.impactEnabled = UI.GetValue('impactEnabled') or false
 	toggles.outline = UI.GetValue('outline') or false
+	CONFIG.autoattackrange = UI.GetValue('autoclick_range') or CONFIG.autoattackrange
 
 	glareOffsets.Cross = UI.GetValue("offset_Cross") or defaults.CrossGlare
 	glareOffsets.SiegeGlare = UI.GetValue("offset_SiegeGlare") or defaults.SiegeGlare
@@ -138,6 +142,8 @@ function loadMainUI()
 		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
 			parryConfig.cooldown = val
 		end)
+		sec:Toggle("autoclick_toggle", "aura")
+		sec:SliderInt("autoclick_range", "Auto Click Distance", 4, 18, 30)
 		--[[
 		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
 			parryConfig.maxDist = val
@@ -218,6 +224,18 @@ local function cleanupLeftPlayers()
 	end
 end
 
+local function getDistance(otherPlayer)
+	local char1 = localPlayer.Character
+	local char2 = otherPlayer.Character
+	if not char1 or not char2 then return math.huge end
+
+	local root1 = char1:FindFirstChild("HumanoidRootPart")
+	local root2 = char2:FindFirstChild("HumanoidRootPart")
+	if not root1 or not root2 then return math.huge end
+
+	return (root1.Position - root2.Position).Magnitude
+end
+
 -- Auto Parry
 
 local parryActive     = false
@@ -279,7 +297,7 @@ end)
 
 -- Main loop
 
-RunService.RenderStepped:Connect(function()
+RunService.Heartbeat:Connect(function()
 	if not keyUnlocked then return end
 
 	cleanupLeftPlayers()
@@ -337,7 +355,12 @@ RunService.RenderStepped:Connect(function()
 		impactLabel.Font     = currentFont
 		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + 2)
 		impactLabel.Text     = "" .. string.format("%.3g", impactRounded)
-		impactLabel.Visible  = toggles.impactEnabled																							
+		impactLabel.Visible  = toggles.impactEnabled	
+		
+		local dist = getDistance(player)
+		if dist <= CONFIG.autoattackrange  then
+			mouse1click()
+		end
 	end
 
 	if toggles.autoParry then
@@ -393,17 +416,13 @@ RunService.RenderStepped:Connect(function()
 		seenIndicators = {}
 		parryActive    = false
 	end
-
+	
+	
 end)
 
---[[
+
 while true do
 	task.wait(1)
-	local t = os.clock()
-	for i, v in pairs(seenIndicators) do
-		if t - v > 2 then
-			seenIndicators[i] = nil
-		end
-	end
+	CONFIG.autoattackrange = UI.GetValue('autoclick_range')
+	CONFIG.autoattackrange = UI.Getvalue('autoclick_toggle')
 end
-]]
