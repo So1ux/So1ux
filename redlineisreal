@@ -297,7 +297,7 @@ end)
 
 -- Main loop
 
-RunService.Heartbeat:Connect(function()
+RunService.RenderStepped:Connect(function()
 	if not keyUnlocked then return end
 
 	cleanupLeftPlayers()
