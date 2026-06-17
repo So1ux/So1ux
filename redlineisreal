@@ -10,10 +10,13 @@ local camera = workspace.CurrentCamera
 local visualEffects = localPlayer.PlayerGui:WaitForChild("VisualEffects")
 local workspEffects = workspace:WaitForChild('Effects')
 
-local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
 local keyUnlocked = true
 local gameId = game.GameId
 local placeId = game.PlaceId
+
+local math_floor = math.floor
+local math_clamp =math.clamp
+local math_huge = 99999999
 
 local lobbyPlaceId = 94987506187454
 -- local warn = function() end local print = function() end
@@ -42,7 +45,7 @@ local toggles = {
 	impactEnabled = false,
 	outline       = false,
 	autoParry     = false,
-	
+
 }
 
 local sizes = {
@@ -76,7 +79,7 @@ local FONTS = {
 	{ value = Drawing.Fonts.SystemBold, label = "SF Bold"       },
 	{ value = Drawing.Fonts.Fortnite,   label = "Fortnite"      },
 	{ value = Drawing.Fonts.Minecraft,  label = "Minecraft"     },
-	
+
 }
 
 local fontIndex = 1
@@ -134,6 +137,8 @@ function loadMainUI()
 
 		sec:Toggle("impactEnabled", "Posture ESP", function(val) toggles.impactEnabled = val end)
 		sec:SliderInt("impact_size", "Posture Text Size", 12, 32, sizes.impact, function(val) sizes.impact = val end)
+
+		sec:Button("Refresh Drawings", function() refreshAllDrawings() end)
 	end)
 
 	UI.AddTab("Combat", function(tab)
@@ -175,7 +180,7 @@ end
 local espObjects = {}
 
 local function getHealthColor(health)
-	local ratio = math.clamp(health / CONFIG.MaxHealth, 0, 1)
+	local ratio = math_clamp(health / CONFIG.MaxHealth, 0, 1)
 	if ratio > 0.6 then
 		return CONFIG.HealthColors.High
 	elseif ratio > 0.3 then
@@ -216,7 +221,7 @@ local function cleanupLeftPlayers()
 	local currentPlayers = Players:GetPlayers()
 	local playerSet = {}
 	for _, p in ipairs(currentPlayers) do
-		playerSet[p] = true
+		playerSet[p.Name] = true
 	end
 	for player, esp in pairs(espObjects) do
 		if not playerSet[player] then
@@ -231,14 +236,28 @@ end
 local function getDistance(otherPlayer)
 	local char1 = localPlayer.Character
 	local char2 = otherPlayer.Character
-	if not char1 or not char2 then return math.huge end
+	if not char1 or not char2 then return math_huge end
 
 	local root1 = char1:FindFirstChild("HumanoidRootPart")
 	local root2 = char2:FindFirstChild("HumanoidRootPart")
-	if not root1 or not root2 then return math.huge end
+	if not root1 or not root2 then return math_huge end
 
 	return (root1.Position - root2.Position).Magnitude
 end
+
+-- Add near the top, after espObjects is declared
+function refreshAllDrawings()
+	for _, esp in pairs(espObjects) do
+		pcall(function() esp.label:Remove() end)
+		pcall(function() esp.nameLabel:Remove() end)
+		pcall(function() esp.impactLabel:Remove() end)
+	end
+	espObjects = {}
+	warn("Drawings refreshed")
+end
+
+-- In loadMainUI, inside the ESP tab's section:
+
 
 -- Auto Parry
 
@@ -273,7 +292,7 @@ local function tryParry(indicator, iaddress)
 	local glareDelay = glareOffsets[indicator.Name] or 0
 
 	parryActive   = true
-	
+
 	task.spawn(function()
 		local totalDelay = parryConfig.latency + glareDelay
 		if totalDelay > 0 then
@@ -287,20 +306,22 @@ local function tryParry(indicator, iaddress)
 		parryActive = false
 		lastParryTime = os.clock() * 1000
 		repeat task.wait(0.01)  until os.clock() - validatedParry < 0.2 or os.clock() - a1 > 0.5
-		
+
 		seenIndicators[iaddress] = nil
 		warn'parrydetected'
 	end)
 end
 
 repeat task.wait(0.1) until keyUnlocked==true
+
 UI.RemoveTab("Key System")
 task.spawn(function()
 	loadMainUI()
 end)
-
+local ad = '/150'
+local offsethead = Vector3.new(0, 1.5, 0)
 -- Main loop
-	
+
 RunService.RenderStepped:Connect(function()
 	if not keyUnlocked then return end
 
@@ -328,7 +349,7 @@ RunService.RenderStepped:Connect(function()
 			continue
 		end
 
-		local headPosition = head.Position + Vector3.new(0, 1.5, 0)
+		local headPosition = head.Position + offsethead
 		local screenPos, onScreen = WorldToScreen(headPosition)
 
 		if not onScreen then
@@ -342,7 +363,7 @@ RunService.RenderStepped:Connect(function()
 		label.Size     = sizes.health
 		label.Font     = currentFont
 		label.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY)
-		label.Text     = tostring(health) .. " HP"
+		label.Text     = tostring(health) .. ad
 		label.Color    = getHealthColor(health)
 		label.Visible  = toggles.healthEnabled
 
@@ -353,7 +374,7 @@ RunService.RenderStepped:Connect(function()
 		nameLabel.Text     = player.Name
 		nameLabel.Visible  = toggles.nameEnabled
 
-		local impactRounded = impact and math.floor(impact * 1000 + 0.5) / 1000 or 0
+		local impactRounded = impact and math_floor(impact * 1000 + 0.5) / 1000 or 0
 		impactLabel.Outline  = toggles.outline
 		impactLabel.Size     = sizes.impact
 		impactLabel.Font     = currentFont
@@ -367,17 +388,18 @@ RunService.RenderStepped:Connect(function()
 				mouse1click()
 			end
 		end
+		
 	end
 
 	if toggles.autoParry then
-		
+
 
 		if visualEffects then
 			for _, child in ipairs(visualEffects:GetChildren()) do
 				if PARRY_TRIGGERS[child.Name] then
 					-- seenIndicators[child.Address] = os.clock()
 					--if not seenIndicators[child.Address] then
-					
+
 					if not seenIndicators[tostring(child.Address)] and not table.find(seenIndicators, tostring(child.Address)) then
 						seenIndicators[tostring(child.Address)] = os.clock()
 						warn(child.Address)
@@ -401,10 +423,10 @@ RunService.RenderStepped:Connect(function()
 					end
 					if part and part.Position and localPlayer.Character.HumanoidRootPart.Position then
 						local distance = (localPlayer.Character.HumanoidRootPart.Position - part.Position).Magnitude
-					
+
 						if distance < 10 then
 							if not seenIndicators[part.Address] then
-								
+
 								seenIndicators[part.Address] =  true
 								validatedParry = os.clock()
 								lastParryTime = 0
@@ -422,8 +444,8 @@ RunService.RenderStepped:Connect(function()
 		seenIndicators = {}
 		parryActive    = 	false
 	end
-	
-	
+
+
 end)
 
 
