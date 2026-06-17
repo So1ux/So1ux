@@ -9,7 +9,9 @@ local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local visualEffects = localPlayer.PlayerGui:WaitForChild("VisualEffects")
 local workspEffects = workspace:WaitForChild('Effects')
+local rs = game:GetService("ReplicatedStorage")
 
+local VALID_KEY = "Redline_ThankyouForSupportingMe!MATCHAONLY"
 local keyUnlocked = true
 local gameId = game.GameId
 local placeId = game.PlaceId
@@ -19,6 +21,9 @@ local math_clamp =math.clamp
 local math_huge = 99999999
 
 local lobbyPlaceId = 94987506187454
+local localPlayerTeam = 0
+
+
 -- local warn = function() end local print = function() end
 
 local active = {
@@ -37,6 +42,7 @@ local CONFIG = {
 	MaxHealth = 100,
 	autoattackrange = 18,
 	autoattackenabled = false,
+	team_check = false,
 }
 
 local toggles = {
@@ -143,6 +149,7 @@ function loadMainUI()
 
 	UI.AddTab("Combat", function(tab)
 		local sec = tab:Section("Auto Parry (WIP)", "Left")
+		
 		parrytoggle = sec:Toggle("autoParry", "Auto Parry", function(val) toggles.autoParry = val end)
 
 		parrylatency = sec:SliderInt("parry_latency", "ADJUST GLARE LATENCY", 0, 500 , parryConfig.latency, function(val)
@@ -151,8 +158,13 @@ function loadMainUI()
 		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
 			parryConfig.cooldown = val
 		end)
-		sec:Toggle("autoclick_toggle", "aura")
-		sec:SliderInt("autoclick_range", "Auto Click Distance", 4, 	30)
+		local aurasec = tab:Section("Aura Config", "Left")
+		aurasec:Toggle("autoclick_toggle", "Aura")
+		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 	30)
+		aurasec:Toggle("teamcheck_toggle", "Team Check (AURA)")
+		local sec2 = tab:Section("USE WITH CAUTION", "Left")
+		sec2:Toggle("ParryExpander", "Parry Hitbox Expander")
+		sec2:Toggle("HitboxExpander", "Hitbox Expander")
 		--[[
 		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
 			parryConfig.maxDist = val
@@ -256,6 +268,16 @@ function refreshAllDrawings()
 	warn("Drawings refreshed")
 end
 
+local function getTeam(player)
+	local teamId = -1
+	if not rs.ReadOnly.Match:FindFirstChild("Players") then
+		return teamId
+	end
+	local team = rs.ReadOnly.Match.Players:FindFirstChild(player.UserId)
+	teamId = team or teamId
+	return teamId
+end
+
 -- In loadMainUI, inside the ESP tab's section:
 
 
@@ -317,7 +339,7 @@ repeat task.wait(0.1) until keyUnlocked==true
 UI.RemoveTab("Key System")
 task.spawn(function()
 	loadMainUI()
-end)
+end)		
 local ad = '/150'
 local offsethead = Vector3.new(0, 1.5, 0)
 -- Main loop
@@ -381,14 +403,21 @@ RunService.RenderStepped:Connect(function()
 		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + 2)
 		impactLabel.Text     = "" .. string.format("%.3g", impactRounded)
 		impactLabel.Visible  = toggles.impactEnabled	
-		
+
 		local dist = getDistance(player)
+		
 		if CONFIG.autoattackenabled then
 			if dist <= CONFIG.autoattackrange  then
-				mouse1click()
+				if CONFIG.team_check == true then
+					if localPlayerTeam~=getTeam(player) then
+						mouse1click()
+					end
+				else
+					mouse1click()
+				end
+				
 			end
 		end
-		
 	end
 
 	if toggles.autoParry then
@@ -451,10 +480,34 @@ end)
 
 while true do
 	task.wait(1)
+	CONFIG.team_check = UI.GetValue("teamcheck_toggle")	
+	localPlayerTeam = getTeam(localPlayer)
+	if UI.GetValue("HitboxExpander") == true then
+		for i, v in pairs(game:GetService("Players"):GetPlayers()) do
+			if v.Name~=localPlayer.Name then
+				pcall(function()
+					for i, v in pairs(v.Character.Hurtboxes:GetChildren()) do
+						if v.Name ~= "Parry_Hurtbox" then
+							v.Size = Vector3.new(30, 30, 30)
+						else
+							v.Size = Vector3.new(1,1,1)
+						end
+					end
+				end)
+			end
+		end
+	end
+	if UI.GetValue("ParryExpander") == true then
+		pcall(function()
+			localPlayer.Character.Hurtboxes.Parry_Hurtbox.Size = Vector3.new(32,32,32)
+		end)
+	end
 	if placeId == lobbyPlaceId then
+
 		CONFIG.autoattackenabled = false
 		return
 	end
 	CONFIG.autoattackrange = UI.GetValue('autoclick_range')
 	CONFIG.autoattackenabled = UI.GetValue('autoclick_toggle')
+
 end
