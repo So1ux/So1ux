@@ -88,6 +88,8 @@ local FONTS = {
 
 }
 
+local cacheduserids = {}
+
 local fontIndex = 1
 local currentFont = FONTS[1].value
 
@@ -268,12 +270,31 @@ function refreshAllDrawings()
 	warn("Drawings refreshed")
 end
 
+local function getuserid(player)
+	local id = -1
+	if cacheduserids[player.Name] then
+		return cacheduserids[player.Name]
+	else
+		id = memory_read("int", player.Address + 760)
+		cacheduserids[player.Name] = id
+	end
+	
+	
+	return id 
+end
+
 local function getTeam(player)
 	local teamId = -1
 	if not rs.ReadOnly.Match:FindFirstChild("Players") then
 		return teamId
 	end
-	local team = rs.ReadOnly.Match.Players:FindFirstChild(player.UserId)
+	if not player then 
+		return teamId
+	end
+	local team = rs.ReadOnly.Match.Players:FindFirstChild(getuserid(player))
+	if team then
+		team = team:GetAttribute("team_id")
+	end
 	teamId = team or teamId
 	return teamId
 end
