@@ -14,12 +14,17 @@ local math = math
 local workspace = workspace
 local math_floor = math.floor
 local math_clamp =math.clamp
+local os_clock = os.clock
 local math_huge = 99999999
 local WorldToScreen = WorldToScreen
+local findFirstChild = workspace.FindFirstChild
 
 local lobbyPlaceId = 94987506187454
 local localPlayerTeam = 0
 local localPlayername = localPlayer.Name
+
+local cachedlocalCharacter = nil
+local cachedlocalHRP = nil
 
 
 -- local warn = function() end local print = function() end
@@ -127,6 +132,18 @@ end
 local function getPlayers()
 	return playerscache
 end
+local function getLocalCharacterData()
+	local character = localPlayer.Character
+
+	-- rebuild if character reference changed, or if our cached HRP is gone/destroyed
+	if character ~= cachedlocalCharacter or not cachedlocalHRP or cachedlocalHRP.Parent == nil then
+		cachedlocalCharacter = character
+		cachedlocalHRP = character and character:FindFirstChild("HumanoidRootPart") or nil
+	end
+
+	return cachedlocalCharacter, cachedlocalHRP
+end
+
 function loadMainUI()
 	local parrylatency
 	local parrydist
@@ -268,13 +285,13 @@ local function cleanupLeftPlayers()
 	end
 end
 
-local function getDistance(otherPlayer)
+local function getDistance(otherPlayer, root1, root2)
 	local char1 = localPlayer.Character
 	local char2 = otherPlayer.Character
 	if not char1 or not char2 then return math_huge end
 
-	local root1 = char1:FindFirstChild("HumanoidRootPart")
-	local root2 = char2:FindFirstChild("HumanoidRootPart")
+	local root1 = root1 -- findFirstChild(char1, "HumanoidRootPart")
+	local root2 = root2
 	if not root1 or not root2 then return math_huge end
 
 	return (root1.Position - root2.Position).Magnitude
@@ -330,12 +347,12 @@ local function tryParry(indicator, iaddress)
 	-- warn'trying parry'
 	if parryActive then return end
 
-	local now = os.clock() * 1000
+	local now = os_clock() * 1000
 	if (now - lastParryTime) < parryConfig.cooldown then return end
 
 	if parryConfig.maxDist > 0 then
 		local char = localPlayer.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local root = char and findFirstChild(char, "HumanoidRootPart")
 		if root then
 			local dist = (indicator.Position - root.Position).Magnitude
 			if dist > parryConfig.maxDist then warn'too far' return end
@@ -355,10 +372,10 @@ local function tryParry(indicator, iaddress)
 		task.wait()
 		keyrelease(0x46)
 		-- task.wait(0.45)
-		local a1 = os.clock()
+		local a1 = os_clock()
 		parryActive = false
-		lastParryTime = os.clock() * 1000
-		repeat task.wait(0.01)  until os.clock() - validatedParry < 0.2 or os.clock() - a1 > 0.5
+		lastParryTime = os_clock() * 1000
+		repeat task.wait(0.01)  until os_clock() - validatedParry < 0.2 or os_clock() - a1 > 0.5
 
 		seenIndicators[iaddress] = nil
 		warn'parrydetected'
@@ -375,14 +392,14 @@ local function getCachedData(player)
 		PlayerCacheParts[player.Name] = data
 
 		if character then
-			data.hrp = character:FindFirstChild("HumanoidRootPart")
+			data.hrp = findFirstChild(character, "HumanoidRootPart")
 		end
 
-		local readOnly = player:FindFirstChild("ReadOnly")
+		local readOnly = findFirstChild(player, "ReadOnly")
 		if readOnly then
 			data.readOnly = readOnly
-			data.healthStat = readOnly:FindFirstChild("health")
-			data.impactStat = readOnly:FindFirstChild("impact")
+			data.healthStat = findFirstChild(readOnly, "health")
+			data.impactStat = findFirstChild(readOnly, "impact")
 		end
 	end
 
@@ -398,8 +415,8 @@ end)
 local ad = '/150'
 local intervalfps = 1 / tonumber(getfenv().FPS)
 
-local nextTick = os.clock()
-local last = os.clock()
+local nextTick = os_clock()
+local last = os_clock()
 local offsethead = Vector3.new(0, 2.5, 0)
 
 local d1, d2, d3 = 1000, 0.5, 2 -- pre defining numbers for maximum performance :sob:
@@ -408,6 +425,7 @@ local d1, d2, d3 = 1000, 0.5, 2 -- pre defining numbers for maximum performance 
 -- Main loop
 
 local function rsloop(dt)
+	local lpCharacter, lpHrp = getLocalCharacterData()
 	for _, player in pairs(getPlayers()) do
 		if player.Name == localPlayername then continue end
 
@@ -418,19 +436,19 @@ local function rsloop(dt)
 
 		local character  = player.Character
 		local data = getCachedData(player)
-		local head = data.hrp
+		local targethrp = data.hrp
 		local health = data.healthStat and data.healthStat.Value
 		local impact = data.impactStat and data.impactStat.Value
 		
-		if not head or not health then
+		if not targethrp or not health then
 			label.Visible       = false
 			nameLabel.Visible   = false
 			impactLabel.Visible = false
 			continue
 		end
 
-		local headPosition = head.Position + offsethead
-		local screenPos, onScreen = WorldToScreen(headPosition)
+		local targethrpPosition = targethrp.Position + offsethead
+		local screenPos, onScreen = WorldToScreen(targethrpPosition)
 
 		if not onScreen then
 			label.Visible       = false
@@ -465,7 +483,7 @@ local function rsloop(dt)
 		
 
 		if CONFIG.autoattackenabled then
-			local dist = getDistance(player)
+			local dist = getDistance(player, lpHrp, targethrp)
 			if dist <= CONFIG.autoattackrange  then
 				if CONFIG.team_check == true then
 					if localPlayerTeam~=getTeam(player) then
@@ -485,16 +503,16 @@ local function rsloop(dt)
 		if visualEffects then
 			for _, child in ipairs(visualEffects:GetChildren()) do
 				if PARRY_TRIGGERS[child.Name] then
-					-- seenIndicators[child.Address] = os.clock()
+					-- seenIndicators[child.Address] = os_clock()
 					--if not seenIndicators[child.Address] then
 
 					if not seenIndicators[tostring(child.Address)] and not table.find(seenIndicators, tostring(child.Address)) then
-						seenIndicators[tostring(child.Address)] = os.clock()
+						seenIndicators[tostring(child.Address)] = os_clock()
 						warn(child.Address)
 						warn('attempt parry', child.Name)
 						tryParry(child, tostring(child.Address))
 						--[[
-						seenIndicators[child.Address] = os.clock()
+						seenIndicators[child.Address] = os_clock()
 						warn('attempt parry', child.Name)
 						tryParry(child)
 						]]
@@ -516,7 +534,7 @@ local function rsloop(dt)
 							if not seenIndicators[part.Address] then
 
 								seenIndicators[part.Address] =  true
-								validatedParry = os.clock()
+								validatedParry = os_clock()
 								lastParryTime = 0
 								if parryActive then						
 									-- parryActive = false
@@ -537,7 +555,7 @@ end
 
 RunService.RenderStepped:Connect(function(dt)
 	if not keyUnlocked then return end
-	local now = os.clock()
+	local now = os_clock()
 	if now - last >= intervalfps then
 		last = now
 		cleanupLeftPlayers()
