@@ -1,6 +1,9 @@
 if not getfenv().FPS then
 	getfenv().FPS = 120
 end
+if not getfenv().MeleeAPUpdatePerSecond then -- ignore this, not implemented
+	getfenv().MeleeAPUpdatePerSecond = 60
+end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
@@ -17,7 +20,7 @@ local workspace = workspace
 local math_floor = math.floor
 local math_clamp = math.clamp
 local os_clock = os.clock
-local math_huge = 99999999
+local math_huge = math.huge
 local WorldToScreen = WorldToScreen
 local findFirstChild = workspace.FindFirstChild
 
@@ -27,6 +30,11 @@ local localPlayername = localPlayer.Name
 
 local cachedlocalCharacter = nil
 local cachedlocalHRP = nil
+local timePosOfLastHit = nil
+
+local animReader =
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/matcha_animreader"))()
+animReader = _G.GetPlayingAnims
 
 -- local warn = function() end local print = function() end
 
@@ -47,6 +55,8 @@ local CONFIG = {
 	autoattackrange = 18,
 	autoattackenabled = false,
 	team_check = false,
+	MeleeAP = false,
+	MeleeAPRange = 30,
 }
 
 local toggles = {
@@ -102,6 +112,12 @@ local PARRY_TRIGGERS = {
 	["MonarchGlare"] = true,
 	["PhoenixGlare"] = true,
 	["Cross"] = true,
+}
+
+local MeleeAP_Triggers = {
+	"rbxassetid://71188211641772",
+	"rbxassetid://87457990259233",
+	"rbxassetid://105441036119013",
 }
 
 local cacheduserids = {}
@@ -221,6 +237,7 @@ function loadMainUI()
 		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
 			parryConfig.cooldown = val
 		end)
+
 		local aurasec = tab:Section("Aura Config", "Left")
 		aurasec:Toggle("autoclick_toggle", "Aura")
 		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 30)
@@ -228,6 +245,9 @@ function loadMainUI()
 		local sec2 = tab:Section("USE WITH CAUTION", "Left")
 		sec2:Toggle("ParryExpander", "Parry Hitbox Expander")
 		sec2:Toggle("HitboxExpander", "Hitbox Expander")
+		local meleeAP = tab:Section("Melee Auto Parry", "Left")
+		meleeAP:Toggle("meleeap_toggle", "Melee AP")
+		meleeAP:SliderInt("meleeap_range", "Melee Detection (EXPENSIVE)", 8, 50, 20)
 		--[[
 		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
 			parryConfig.maxDist = val
@@ -369,7 +389,44 @@ local function getTeam(player)
 	return teamId
 end
 
+local function isSameAnim(v)
+	if not timePosOfLastHit or v.id ~= timePosOfLastHit.id then
+		return false
+	end
+	
+	timePosOfLastHit = {uhh = os.clock(), timepos = v.timePos, id = v.id}
+	local elapsed = os.clock() - timePosOfLastHit.uhh
+	local delta = v.timePos - timePosOfLastHit.timepos
+
+
+	-- if timePos advanced roughly in line with real time, it's still the same ongoing swing
+	return math.abs(delta - elapsed) < 0.2
+end
+
+
+local function isPlayingSlash(character)
+	local data = animReader(character)
+	for i, v in pairs(data) do
+		if table.find(MeleeAP_Triggers, v.id) then
+			if v.timePos > 0.6 then
+				continue
+			end
+			if isSameAnim(v) then
+				continue -- same swing still playing, ignore
+			end
+			return true
+		end
+	end
+
+	return false
+end
 -- In loadMainUI, inside the ESP tab's section:
+
+local function pressParry()
+	keypress(0x46)
+	task.wait()
+	keyrelease(0x46)
+end
 
 local function tryParry(indicator, iaddress)
 	-- warn'trying parry'
@@ -519,9 +576,19 @@ local function rsloop(dt)
 		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + d3)
 		impactLabel.Text = "" .. string.format("%.3g", impactRounded)
 		impactLabel.Visible = toggles.impactEnabled
-
+		local dist
+		if CONFIG.MeleeAP then
+			dist = getDistance(player, lpHrp, targethrp)
+			local velocity = targethrp.Parent.Torso.AssemblyLinearVelocity
+			if dist <= CONFIG.MeleeAPRange then
+				local shouldParry = isPlayingSlash(character)
+				if shouldParry then
+					pressParry()
+				end
+			end
+		end
 		if CONFIG.autoattackenabled then
-			local dist = getDistance(player, lpHrp, targethrp)
+			dist = getDistance(player, lpHrp, targethrp)
 			if dist <= CONFIG.autoattackrange then
 				if CONFIG.team_check == true then
 					if localPlayerTeam ~= getTeam(player) then
@@ -662,8 +729,12 @@ while true do
 	end
 	if placeId == lobbyPlaceId then
 		CONFIG.autoattackenabled = false
+		CONFIG.MeleeAP = false
 		return
 	end
 	CONFIG.autoattackrange = UI.GetValue("autoclick_range")
 	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle")
+
+	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle")
+	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range")
 end
