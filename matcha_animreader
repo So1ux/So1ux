@@ -197,11 +197,14 @@ end
 local function GetPlayingAnims(character)
     local animsPlaying = {}
     local TracksPlaying = GetPlayingAnimationTracks(character)
+    
     for i, trackAddress in pairs(TracksPlaying) do
         local animId, animName = GetIdFromTrack(trackAddress)
+        local timePos = memory_read("float", trackAddress + KnownOffsets.TimePosition)
         animsPlaying[#animsPlaying+1] = {
             id = animId,
             name = animName,
+            timePos = timePos,
         }
     end
     return animsPlaying
