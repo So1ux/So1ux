@@ -224,5 +224,5 @@ while true do
 	end
 end
 ]]
-
+_G.GetPlayingAnims = GetPlayingAnims
 return GetPlayingAnims
