@@ -1,10 +1,12 @@
-if not getfenv().FPS then getfenv().FPS = 120 end
+if not getfenv().FPS then
+	getfenv().FPS = 120
+end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local visualEffects = localPlayer.PlayerGui:WaitForChild("VisualEffects")
-local workspEffects = workspace:WaitForChild('Effects')
+local workspEffects = workspace:WaitForChild("Effects")
 local rs = game:GetService("ReplicatedStorage")
 
 local keyUnlocked = true
@@ -13,7 +15,7 @@ local placeId = game.PlaceId
 local math = math
 local workspace = workspace
 local math_floor = math.floor
-local math_clamp =math.clamp
+local math_clamp = math.clamp
 local os_clock = os.clock
 local math_huge = 99999999
 local WorldToScreen = WorldToScreen
@@ -26,11 +28,10 @@ local localPlayername = localPlayer.Name
 local cachedlocalCharacter = nil
 local cachedlocalHRP = nil
 
-
 -- local warn = function() end local print = function() end
 
 local active = {
-	DoubleParry = false;
+	DoubleParry = false,
 }
 
 local CONFIG = {
@@ -38,9 +39,9 @@ local CONFIG = {
 	OutlineEnabled = true,
 	OffsetY = -40,
 	HealthColors = {
-		High   = Color3.fromRGB(0, 255, 80),
+		High = Color3.fromRGB(0, 255, 80),
 		Medium = Color3.fromRGB(255, 200, 0),
-		Low    = Color3.fromRGB(255, 50, 50),
+		Low = Color3.fromRGB(255, 50, 50),
 	},
 	MaxHealth = 100,
 	autoattackrange = 18,
@@ -50,60 +51,57 @@ local CONFIG = {
 
 local toggles = {
 	healthEnabled = false,
-	nameEnabled   = false,
+	nameEnabled = false,
 	impactEnabled = false,
-	outline       = false,
-	autoParry     = false,
-
+	outline = false,
+	autoParry = false,
 }
 
 local sizes = {
 	health = 14,
-	name   = 14,
+	name = 14,
 	impact = 14,
 }
 
 local parryConfig = {
-	latency  = 0,
-	maxDist  = 0,
+	latency = 0,
+	maxDist = 0,
 	cooldown = 300,
 }
 
 local glareOffsets = {
-	["SiegeGlare"]   = 0,
+	["SiegeGlare"] = 0,
 	["MonarchGlare"] = 0,
 	["PhoenixGlare"] = 0,
-	["Cross"]        = 0,
+	["Cross"] = 0,
 }
 
 local defaults = {
-	SiegeGlare = 400;
-	MonarchGlare = 1300;
-	PhoenixGlare = 750;
-	CrossGlare = 450;
+	SiegeGlare = 400,
+	MonarchGlare = 1300,
+	PhoenixGlare = 750,
+	CrossGlare = 450,
 }
 
 local FONTS = {
-	{ value = Drawing.Fonts.System,     label = "San Francisco" },
-	{ value = Drawing.Fonts.SystemBold, label = "SF Bold"       },
-	{ value = Drawing.Fonts.Fortnite,   label = "Fortnite"      },
-	{ value = Drawing.Fonts.Minecraft,  label = "Minecraft"     },
-
+	{ value = Drawing.Fonts.System, label = "San Francisco" },
+	{ value = Drawing.Fonts.SystemBold, label = "SF Bold" },
+	{ value = Drawing.Fonts.Fortnite, label = "Fortnite" },
+	{ value = Drawing.Fonts.Minecraft, label = "Minecraft" },
 }
-
 
 -- Auto Parry
 
-local parryActive     = false
-local lastParryTime   = 0
+local parryActive = false
+local lastParryTime = 0
 local validatedParry = 0
-local seenIndicators  = {}
+local seenIndicators = {}
 
 local PARRY_TRIGGERS = {
-	["SiegeGlare"]   = true,
+	["SiegeGlare"] = true,
 	["MonarchGlare"] = true,
 	["PhoenixGlare"] = true,
-	["Cross"]        = true,
+	["Cross"] = true,
 }
 
 local cacheduserids = {}
@@ -115,8 +113,12 @@ local currentFont = FONTS[1].value
 
 local function cycleFont(dir)
 	fontIndex = fontIndex + dir
-	if fontIndex < 1 then fontIndex = #FONTS end
-	if fontIndex > #FONTS then fontIndex = 1 end
+	if fontIndex < 1 then
+		fontIndex = #FONTS
+	end
+	if fontIndex > #FONTS then
+		fontIndex = 1
+	end
 	currentFont = FONTS[fontIndex].value
 	UI.SetValue("font_label", "Font: " .. FONTS[fontIndex].label)
 end
@@ -148,18 +150,18 @@ function loadMainUI()
 	local parrylatency
 	local parrydist
 	local parrytoggle
-	toggles.autoParry = UI.GetValue('autoParry') or false
-	parryConfig.latency = UI.GetValue('parry_latency') or 0
+	toggles.autoParry = UI.GetValue("autoParry") or false
+	parryConfig.latency = UI.GetValue("parry_latency") or 0
 	parryConfig.maxDist = 0 -- UI.GetValue('parry_dist') or 800
-	toggles.nameEnabled = UI.GetValue('nameEnabled') or false
-	parryConfig.cooldown = UI.GetValue('parry_cooldown') or 50
-	toggles.healthEnabled = UI.GetValue('healthEnabled') or false
-	sizes.health = UI.GetValue('health_size') or 16
-	sizes.name = UI.GetValue('name_size') or 16
-	sizes.impact = UI.GetValue('impact_size') or 16
-	toggles.impactEnabled = UI.GetValue('impactEnabled') or false
-	toggles.outline = UI.GetValue('outline') or false
-	CONFIG.autoattackrange = UI.GetValue('autoclick_range') or CONFIG.autoattackrange
+	toggles.nameEnabled = UI.GetValue("nameEnabled") or false
+	parryConfig.cooldown = UI.GetValue("parry_cooldown") or 50
+	toggles.healthEnabled = UI.GetValue("healthEnabled") or false
+	sizes.health = UI.GetValue("health_size") or 16
+	sizes.name = UI.GetValue("name_size") or 16
+	sizes.impact = UI.GetValue("impact_size") or 16
+	toggles.impactEnabled = UI.GetValue("impactEnabled") or false
+	toggles.outline = UI.GetValue("outline") or false
+	CONFIG.autoattackrange = UI.GetValue("autoclick_range") or CONFIG.autoattackrange
 
 	glareOffsets.Cross = UI.GetValue("offset_Cross") or defaults.CrossGlare
 	glareOffsets.SiegeGlare = UI.GetValue("offset_SiegeGlare") or defaults.SiegeGlare
@@ -168,30 +170,52 @@ function loadMainUI()
 	UI.AddTab("ESP", function(tab)
 		a1 = tab
 		local sec = tab:Section("ESP Settings", "Left")
-		sec:Toggle("outline", "Text Stroke", function(val) toggles.outline = val end)
+		sec:Toggle("outline", "Text Stroke", function(val)
+			toggles.outline = val
+		end)
 
 		sec:InputText("font_label", "Font: " .. FONTS[fontIndex].label, "", function() end)
-		sec:Button("Prev Font <<", function() cycleFont(-1) end)
-		sec:Button("Next Font >>", function() cycleFont( 1) end)
+		sec:Button("Prev Font <<", function()
+			cycleFont(-1)
+		end)
+		sec:Button("Next Font >>", function()
+			cycleFont(1)
+		end)
 
-		sec:Toggle("healthEnabled", "Health ESP", function(val) toggles.healthEnabled = val end)
-		sec:SliderInt("health_size", "Health Text Size", 12, 32, sizes.health, function(val) sizes.health = val end)
+		sec:Toggle("healthEnabled", "Health ESP", function(val)
+			toggles.healthEnabled = val
+		end)
+		sec:SliderInt("health_size", "Health Text Size", 12, 32, sizes.health, function(val)
+			sizes.health = val
+		end)
 
-		sec:Toggle("nameEnabled", "Name ESP", function(val) toggles.nameEnabled = val end)
-		sec:SliderInt("name_size", "Name Text Size", 12, 32, sizes.name, function(val) sizes.name = val end)
+		sec:Toggle("nameEnabled", "Name ESP", function(val)
+			toggles.nameEnabled = val
+		end)
+		sec:SliderInt("name_size", "Name Text Size", 12, 32, sizes.name, function(val)
+			sizes.name = val
+		end)
 
-		sec:Toggle("impactEnabled", "Posture ESP", function(val) toggles.impactEnabled = val end)
-		sec:SliderInt("impact_size", "Posture Text Size", 12, 32, sizes.impact, function(val) sizes.impact = val end)
+		sec:Toggle("impactEnabled", "Posture ESP", function(val)
+			toggles.impactEnabled = val
+		end)
+		sec:SliderInt("impact_size", "Posture Text Size", 12, 32, sizes.impact, function(val)
+			sizes.impact = val
+		end)
 
-		sec:Button("Refresh Drawings", function() refreshAllDrawings() end)
+		sec:Button("Refresh Drawings", function()
+			refreshAllDrawings()
+		end)
 	end)
 
 	UI.AddTab("Combat", function(tab)
-		local sec = tab:Section("Auto Parry (WIP)", "Left")
+		local sec = tab:Section("Gun Auto Parry (WIP)", "Left")
 
-		parrytoggle = sec:Toggle("autoParry", "Auto Parry", function(val) toggles.autoParry = val end)
+		parrytoggle = sec:Toggle("autoParry", "Auto Parry", function(val)
+			toggles.autoParry = val
+		end)
 
-		parrylatency = sec:SliderInt("parry_latency", "ADJUST GLARE LATENCY", 0, 500 , parryConfig.latency, function(val)
+		parrylatency = sec:SliderInt("parry_latency", "ADJUST GLARE LATENCY", 0, 500, parryConfig.latency, function(val)
 			parryConfig.latency = val
 		end)
 		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
@@ -199,7 +223,7 @@ function loadMainUI()
 		end)
 		local aurasec = tab:Section("Aura Config", "Left")
 		aurasec:Toggle("autoclick_toggle", "Aura")
-		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 	30)
+		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 30)
 		aurasec:Toggle("teamcheck_toggle", "Team Check (AURA)")
 		local sec2 = tab:Section("USE WITH CAUTION", "Left")
 		sec2:Toggle("ParryExpander", "Parry Hitbox Expander")
@@ -245,29 +269,28 @@ local function getOrCreateESP(player)
 	if not espObjects[player.Name] then
 		local label = Drawing.new("Text")
 		label.Visible = true
-		label.Center  = true
+		label.Center = true
 		label.Outline = toggles.outline
-		label.Size    = sizes.health
+		label.Size = sizes.health
 
 		local nameLabel = Drawing.new("Text")
 		nameLabel.Visible = true
-		nameLabel.Center  = true
+		nameLabel.Center = true
 		nameLabel.Outline = toggles.outline
-		nameLabel.Size    = sizes.name
-		nameLabel.Color   = Color3.fromRGB(255, 255, 255)
+		nameLabel.Size = sizes.name
+		nameLabel.Color = Color3.fromRGB(255, 255, 255)
 
 		local impactLabel = Drawing.new("Text")
 		impactLabel.Visible = true
-		impactLabel.Center  = true
+		impactLabel.Center = true
 		impactLabel.Outline = toggles.outline
-		impactLabel.Size    = sizes.impact
-		impactLabel.Color   = Color3.fromRGB(180, 140, 255)
+		impactLabel.Size = sizes.impact
+		impactLabel.Color = Color3.fromRGB(180, 140, 255)
 
 		espObjects[player.Name] = { label = label, nameLabel = nameLabel, impactLabel = impactLabel }
 	end
 	return espObjects[player.Name]
 end
-
 
 local function cleanupLeftPlayers()
 	local currentPlayers = getPlayers()
@@ -288,11 +311,15 @@ end
 local function getDistance(otherPlayer, root1, root2)
 	local char1 = localPlayer.Character
 	local char2 = otherPlayer.Character
-	if not char1 or not char2 then return math_huge end
+	if not char1 or not char2 then
+		return math_huge
+	end
 
 	local root1 = root1 -- findFirstChild(char1, "HumanoidRootPart")
 	local root2 = root2
-	if not root1 or not root2 then return math_huge end
+	if not root1 or not root2 then
+		return math_huge
+	end
 
 	return (root1.Position - root2.Position).Magnitude
 end
@@ -300,9 +327,15 @@ end
 -- Add near the top, after espObjects is declared
 function refreshAllDrawings()
 	for _, esp in pairs(espObjects) do
-		pcall(function() esp.label:Remove() end)
-		pcall(function() esp.nameLabel:Remove() end)
-		pcall(function() esp.impactLabel:Remove() end)
+		pcall(function()
+			esp.label:Remove()
+		end)
+		pcall(function()
+			esp.nameLabel:Remove()
+		end)
+		pcall(function()
+			esp.impactLabel:Remove()
+		end)
 	end
 	espObjects = {}
 	warn("Drawings refreshed")
@@ -317,8 +350,7 @@ local function getuserid(player)
 		cacheduserids[player.Name] = id
 	end
 
-
-	return id 
+	return id
 end
 
 local function getTeam(player)
@@ -326,7 +358,7 @@ local function getTeam(player)
 	if not rs.ReadOnly.Match:FindFirstChild("Players") then
 		return teamId
 	end
-	if not player then 
+	if not player then
 		return teamId
 	end
 	local team = rs.ReadOnly.Match.Players:FindFirstChild(getuserid(player))
@@ -339,29 +371,32 @@ end
 
 -- In loadMainUI, inside the ESP tab's section:
 
-
-
-
-
 local function tryParry(indicator, iaddress)
 	-- warn'trying parry'
-	if parryActive then return end
+	if parryActive then
+		return
+	end
 
 	local now = os_clock() * 1000
-	if (now - lastParryTime) < parryConfig.cooldown then return end
+	if (now - lastParryTime) < parryConfig.cooldown then
+		return
+	end
 
 	if parryConfig.maxDist > 0 then
 		local char = localPlayer.Character
 		local root = char and findFirstChild(char, "HumanoidRootPart")
 		if root then
 			local dist = (indicator.Position - root.Position).Magnitude
-			if dist > parryConfig.maxDist then warn'too far' return end
+			if dist > parryConfig.maxDist then
+				-- warn("too far")
+				return
+			end
 		end
 	end
 
 	local glareDelay = glareOffsets[indicator.Name] or 0
 
-	parryActive   = true
+	parryActive = true
 
 	task.spawn(function()
 		local totalDelay = parryConfig.latency + glareDelay
@@ -375,10 +410,12 @@ local function tryParry(indicator, iaddress)
 		local a1 = os_clock()
 		parryActive = false
 		lastParryTime = os_clock() * 1000
-		repeat task.wait(0.01)  until os_clock() - validatedParry < 0.2 or os_clock() - a1 > 0.5
+		repeat
+			task.wait(0.01)
+		until os_clock() - validatedParry < 0.2 or os_clock() - a1 > 0.5
 
 		seenIndicators[iaddress] = nil
-		warn'parrydetected'
+		warn("parrydetected")
 	end)
 end
 
@@ -406,13 +443,15 @@ local function getCachedData(player)
 	return data
 end
 
-repeat task.wait(0.1) until keyUnlocked==true
+repeat
+	task.wait(0.1)
+until keyUnlocked == true
 
 UI.RemoveTab("Key System")
 task.spawn(function()
 	loadMainUI()
-end)		
-local ad = '/150'
+end)
+local ad = "/150"
 local intervalfps = 1 / tonumber(getfenv().FPS)
 
 local nextTick = os_clock()
@@ -421,28 +460,29 @@ local offsethead = Vector3.new(0, 2.5, 0)
 
 local d1, d2, d3 = 1000, 0.5, 2 -- pre defining numbers for maximum performance :sob:
 
-
 -- Main loop
 
 local function rsloop(dt)
 	local lpCharacter, lpHrp = getLocalCharacterData()
 	for _, player in pairs(getPlayers()) do
-		if player.Name == localPlayername then continue end
+		if player.Name == localPlayername then
+			continue
+		end
 
 		local esp = getOrCreateESP(player)
-		local label       = esp.label
-		local nameLabel   = esp.nameLabel
+		local label = esp.label
+		local nameLabel = esp.nameLabel
 		local impactLabel = esp.impactLabel
 
-		local character  = player.Character
+		local character = player.Character
 		local data = getCachedData(player)
 		local targethrp = data.hrp
 		local health = data.healthStat and data.healthStat.Value
 		local impact = data.impactStat and data.impactStat.Value
-		
+
 		if not targethrp or not health then
-			label.Visible       = false
-			nameLabel.Visible   = false
+			label.Visible = false
+			nameLabel.Visible = false
 			impactLabel.Visible = false
 			continue
 		end
@@ -451,65 +491,63 @@ local function rsloop(dt)
 		local screenPos, onScreen = WorldToScreen(targethrpPosition)
 
 		if not onScreen then
-			label.Visible       = false
-			nameLabel.Visible   = false
+			label.Visible = false
+			nameLabel.Visible = false
 			impactLabel.Visible = false
 			continue
 		end
 
-		label.Outline  = toggles.outline
-		label.Size     = sizes.health
-		label.Font     = currentFont
+		label.Outline = toggles.outline
+		label.Size = sizes.health
+		label.Font = currentFont
 		label.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY)
-		label.Text     = tostring(health) .. ad
-		label.Color    = getHealthColor(health)
-		label.Visible  = toggles.healthEnabled
+		label.Text = tostring(health) .. ad
+		label.Color = getHealthColor(health)
+		label.Visible = toggles.healthEnabled
 
-		nameLabel.Outline  = toggles.outline
-		nameLabel.Size     = sizes.name
-		nameLabel.Font     = currentFont
+		nameLabel.Outline = toggles.outline
+		nameLabel.Size = sizes.name
+		nameLabel.Font = currentFont
 		nameLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY - sizes.name - d3)
-		nameLabel.Text     = player.Name
-		nameLabel.Visible  = toggles.nameEnabled
+		nameLabel.Text = player.Name
+		nameLabel.Visible = toggles.nameEnabled
 
 		local impactRounded = impact and math_floor(impact * d1 + d2) / d1 or 0
-		impactLabel.Outline  = toggles.outline
-		impactLabel.Size     = sizes.impact
-		impactLabel.Font     = currentFont
+		impactLabel.Outline = toggles.outline
+		impactLabel.Size = sizes.impact
+		impactLabel.Font = currentFont
 		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + d3)
-		impactLabel.Text     = "" .. string.format("%.3g", impactRounded)
-		impactLabel.Visible  = toggles.impactEnabled	
-		
-		
+		impactLabel.Text = "" .. string.format("%.3g", impactRounded)
+		impactLabel.Visible = toggles.impactEnabled
 
 		if CONFIG.autoattackenabled then
 			local dist = getDistance(player, lpHrp, targethrp)
-			if dist <= CONFIG.autoattackrange  then
+			if dist <= CONFIG.autoattackrange then
 				if CONFIG.team_check == true then
-					if localPlayerTeam~=getTeam(player) then
+					if localPlayerTeam ~= getTeam(player) then
 						mouse1click()
 					end
 				else
 					mouse1click()
 				end
-
 			end
 		end
 	end
 
 	if toggles.autoParry then
-
-
 		if visualEffects then
 			for _, child in ipairs(visualEffects:GetChildren()) do
 				if PARRY_TRIGGERS[child.Name] then
 					-- seenIndicators[child.Address] = os_clock()
 					--if not seenIndicators[child.Address] then
 
-					if not seenIndicators[tostring(child.Address)] and not table.find(seenIndicators, tostring(child.Address)) then
+					if
+						not seenIndicators[tostring(child.Address)]
+						and not table.find(seenIndicators, tostring(child.Address))
+					then
 						seenIndicators[tostring(child.Address)] = os_clock()
 						warn(child.Address)
-						warn('attempt parry', child.Name)
+						warn("attempt parry", child.Name)
 						tryParry(child, tostring(child.Address))
 						--[[
 						seenIndicators[child.Address] = os_clock()
@@ -532,11 +570,10 @@ local function rsloop(dt)
 
 						if distance < 10 then
 							if not seenIndicators[part.Address] then
-
-								seenIndicators[part.Address] =  true
+								seenIndicators[part.Address] = true
 								validatedParry = os_clock()
 								lastParryTime = 0
-								if parryActive then						
+								if parryActive then
 									-- parryActive = false
 								end
 							end
@@ -548,43 +585,70 @@ local function rsloop(dt)
 	else
 		table.clear(seenIndicators)
 		seenIndicators = {}
-		parryActive    = 	false
+		parryActive = false
 	end
 end
 
-
 RunService.RenderStepped:Connect(function(dt)
-	if not keyUnlocked then return end
+	if not keyUnlocked then
+		return
+	end
 	local now = os_clock()
 	if now - last >= intervalfps then
 		last = now
 		cleanupLeftPlayers()
 		task.spawn(rsloop, dt)
-
 	end
 end)
 
-
 for i, v in pairs(Players:GetPlayers()) do
 	onPlayerAdded(v)
-
 end
 Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerRemoving:Connect(onPlayerRemoving)
-
+if Players.PlayerAdded and Players.PlayerRemoving then
+	Players.PlayerAdded:Connect(onPlayerAdded)
+	Players.PlayerRemoving:Connect(onPlayerRemoving)
+else
+	warn("-= MATCHA W: PlayerAdded/Removing missing, falling back to polling =-")
+	task.spawn(function()
+		while true do
+			local current = Players:GetPlayers()
+			local currentMap = {}
+			for _, p in pairs(current) do
+				currentMap[p.Name] = true
+				if not playerscache[p.Name] then
+					onPlayerAdded(p)
+				end
+			end
+			for name, _ in pairs(playerscache) do
+				if not currentMap[name] then
+					onPlayerRemoving({ Name = name })
+				end
+			end
+			if Players.PlayerAdded and Players.PlayerRemoving then
+				Players.PlayerAdded:Connect(onPlayerAdded)
+				Players.PlayerRemoving:Connect(onPlayerRemoving)
+				warn("PlayerAdded/Removing support detected, going to connections")
+				break
+			end
+			task.wait(1)
+		end
+	end)
+end
 while true do
 	task.wait(1)
-	CONFIG.team_check = UI.GetValue("teamcheck_toggle")	
+	CONFIG.team_check = UI.GetValue("teamcheck_toggle")
 	localPlayerTeam = getTeam(localPlayer)
 	if UI.GetValue("HitboxExpander") == true then
 		for i, v in pairs(getPlayers()) do
-			if v.Name~=localPlayername then
+			if v.Name ~= localPlayername then
 				pcall(function()
 					for i, v in pairs(v.Character.Hurtboxes:GetChildren()) do
 						if v.Name ~= "Parry_Hurtbox" then
 							v.Size = Vector3.new(30, 30, 30)
 						else
-							v.Size = Vector3.new(1,1,1)
+							v.Size = Vector3.new(1, 1, 1)
 						end
 					end
 				end)
@@ -593,16 +657,13 @@ while true do
 	end
 	if UI.GetValue("ParryExpander") == true then
 		pcall(function()
-			localPlayer.Character.Hurtboxes.Parry_Hurtbox.Size = Vector3.new(32,32,32)
+			localPlayer.Character.Hurtboxes.Parry_Hurtbox.Size = Vector3.new(32, 32, 32)
 		end)
 	end
 	if placeId == lobbyPlaceId then
-
 		CONFIG.autoattackenabled = false
 		return
 	end
-	CONFIG.autoattackrange = UI.GetValue('autoclick_range')
-	CONFIG.autoattackenabled = UI.GetValue('autoclick_toggle')
-
+	CONFIG.autoattackrange = UI.GetValue("autoclick_range")
+	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle")
 end
-
