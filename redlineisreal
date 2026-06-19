@@ -396,16 +396,14 @@ local function isSameAnim(v)
 	if not timePosOfLastHit or v.id ~= timePosOfLastHit.id then
 		return false
 	end
-	
-	timePosOfLastHit = {uhh = os.clock(), timepos = v.timePos, id = v.id}
+
+	timePosOfLastHit = { uhh = os.clock(), timepos = v.timePos, id = v.id }
 	local elapsed = os.clock() - timePosOfLastHit.uhh
 	local delta = v.timePos - timePosOfLastHit.timepos
-
 
 	-- if timePos advanced roughly in line with real time, it's still the same ongoing swing
 	return math.abs(delta - elapsed) < 0.2
 end
-
 
 local function isPlayingSlash(character)
 	local data = animReader(character)
@@ -481,11 +479,9 @@ end
 local parryid = "rbxassetid://117005726191901"
 local function isOppParrying(character)
 	local data = animReader(character)
-	print'check'
 	for i, v in pairs(data) do
 		if v.id == parryid then
-			if v.timePos > 0.9 then
-				warn'continue cuzz high time pos'
+			if v.timePos > 1 then
 				continue
 			end
 			return true
@@ -610,7 +606,10 @@ local function rsloop(dt)
 			dist = getDistance(player, lpHrp, targethrp)
 			if dist <= CONFIG.autoattackrange then
 				local isParrying = isOppParrying(character)
-				if isParrying and CONFIG.CancelAuraEnabled then warn'continue ' continue end
+				if isParrying and CONFIG.CancelAuraEnabled then
+					warn("continue ")
+					continue
+				end
 				if CONFIG.team_check == true then
 					if localPlayerTeam ~= getTeam(player) then
 						mouse1click()
@@ -676,17 +675,47 @@ local function rsloop(dt)
 	end
 end
 
-RunService.RenderStepped:Connect(function(dt)
-	if not keyUnlocked then
-		return
-	end
-	local now = os_clock()
-	if now - last >= intervalfps then
-		last = now
-		cleanupLeftPlayers()
-		task.spawn(rsloop, dt)
-	end
-end)
+if RunService.RenderStepped then
+	RunService.RenderStepped:Connect(function(dt)
+		if not keyUnlocked then
+			return
+		end
+		local now = os_clock()
+		if now - last >= intervalfps then
+			last = now
+			cleanupLeftPlayers()
+			task.spawn(rsloop, dt)
+		end
+	end)
+else
+	
+	task.spawn(function()
+		warn(
+			"-= MATCHA REDLINER | RenderStepped not detected :sob:, switching to manual loop, 90 FPS UPDATE"
+		)
+		local FPS = 90
+		local INTERVAL = 1 / FPS
+
+		local lastTime = os.clock()
+		local lastframestart = os.clock()
+		while true do
+			warn'fire'
+			local now = os.clock()
+			local deltaTime = now - lastframestart
+			cleanupLeftPlayers()
+			task.spawn(rsloop, deltaTime)
+
+			local elapsed = os.clock() - lastTime
+			local waitTime = INTERVAL - elapsed
+
+			if waitTime > 0 then
+				task.wait(waitTime)
+			end
+			lastTime = os.clock()
+		end
+		
+	end)
+end
 
 for i, v in pairs(Players:GetPlayers()) do
 	onPlayerAdded(v)
@@ -696,7 +725,7 @@ if Players.PlayerAdded and Players.PlayerRemoving then
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
 else
-	warn("-= MATCHA W: PlayerAdded/Removing missing, falling back to polling =-")
+	warn("-= MATCHA REDLINER | PlayerAdded/Removing missing, falling back to polling =-")
 	task.spawn(function()
 		while true do
 			local current = Players:GetPlayers()
