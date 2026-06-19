@@ -1,9 +1,10 @@
 if not getfenv().FPS then
 	getfenv().FPS = 120
 end
-if not getfenv().MeleeAPUpdatePerSecond then -- ignore this, not implemented
+if not getfenv().MeleeAPUpdatePerSecond then -- expensive function lowkey
 	getfenv().MeleeAPUpdatePerSecond = 60
 end
+local ConfigService = game:GetService("ConfigService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
@@ -57,6 +58,7 @@ local CONFIG = {
 	team_check = false,
 	MeleeAP = false,
 	MeleeAPRange = 30,
+	CancelAuraEnabled = false,
 }
 
 local toggles = {
@@ -241,13 +243,14 @@ function loadMainUI()
 		local aurasec = tab:Section("Aura Config", "Left")
 		aurasec:Toggle("autoclick_toggle", "Aura")
 		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 30)
+		aurasec:Toggle("cancelaura_toggle", "Cancel aura when opp is parrying")
 		aurasec:Toggle("teamcheck_toggle", "Team Check (AURA)")
 		local sec2 = tab:Section("USE WITH CAUTION", "Left")
 		sec2:Toggle("ParryExpander", "Parry Hitbox Expander")
 		sec2:Toggle("HitboxExpander", "Hitbox Expander")
 		local meleeAP = tab:Section("Melee Auto Parry", "Left")
 		meleeAP:Toggle("meleeap_toggle", "Melee AP")
-		meleeAP:SliderInt("meleeap_range", "Melee Detection (EXPENSIVE)", 8, 50, 20)
+		meleeAP:SliderInt("meleeap_range", "Melee Detection Range (EXPENSIVE)", 8, 50, 20)
 		--[[
 		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
 			parryConfig.maxDist = val
@@ -408,7 +411,7 @@ local function isPlayingSlash(character)
 	local data = animReader(character)
 	for i, v in pairs(data) do
 		if table.find(MeleeAP_Triggers, v.id) then
-			if v.timePos > 0.6 then
+			if v.timePos > 0.4 then
 				continue
 			end
 			if isSameAnim(v) then
@@ -474,6 +477,22 @@ local function tryParry(indicator, iaddress)
 		seenIndicators[iaddress] = nil
 		warn("parrydetected")
 	end)
+end
+local parryid = "rbxassetid://117005726191901"
+local function isOppParrying(character)
+	local data = animReader(character)
+	print'check'
+	for i, v in pairs(data) do
+		if v.id == parryid then
+			if v.timePos > 0.9 then
+				warn'continue cuzz high time pos'
+				continue
+			end
+			return true
+		end
+	end
+
+	return false
 end
 
 local function getCachedData(player)
@@ -590,6 +609,8 @@ local function rsloop(dt)
 		if CONFIG.autoattackenabled then
 			dist = getDistance(player, lpHrp, targethrp)
 			if dist <= CONFIG.autoattackrange then
+				local isParrying = isOppParrying(character)
+				if isParrying and CONFIG.CancelAuraEnabled then warn'continue ' continue end
 				if CONFIG.team_check == true then
 					if localPlayerTeam ~= getTeam(player) then
 						mouse1click()
@@ -600,7 +621,6 @@ local function rsloop(dt)
 			end
 		end
 	end
-
 	if toggles.autoParry then
 		if visualEffects then
 			for _, child in ipairs(visualEffects:GetChildren()) do
@@ -671,8 +691,7 @@ end)
 for i, v in pairs(Players:GetPlayers()) do
 	onPlayerAdded(v)
 end
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)
+
 if Players.PlayerAdded and Players.PlayerRemoving then
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
@@ -737,4 +756,5 @@ while true do
 
 	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle")
 	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range")
+	CONFIG.CancelAuraEnabled = UI.GetValue("cancelaura_toggle")
 end
