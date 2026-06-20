@@ -1,10 +1,12 @@
 if not getfenv().FPS then
 	getfenv().FPS = 120
 end
-if not getfenv().MeleeAPUpdatePerSecond then -- expensive function lowkey
+--[[
+if not getfenv().MeleeAPUpdatePerSecond then -- lowk dont mind ts
 	getfenv().MeleeAPUpdatePerSecond = 60
 end
-local ConfigService = game:GetService("ConfigService")
+]]
+local httpservice = game:GetService("HttpService") -- for json encode / decode only
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local localPlayer = Players.LocalPlayer
@@ -32,6 +34,8 @@ local localPlayername = localPlayer.Name
 local cachedlocalCharacter = nil
 local cachedlocalHRP = nil
 local timePosOfLastHit = nil
+
+local configName = "redlinezv12.json"
 
 local animReader =
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/matcha_animreader"))()
@@ -164,10 +168,170 @@ local function getLocalCharacterData()
 	return cachedlocalCharacter, cachedlocalHRP
 end
 
-function loadMainUI()
-	local parrylatency
-	local parrydist
-	local parrytoggle
+local function notification(message, duration)
+	duration = duration or 3
+	notify(message, "REDLINER - @zv12", duration)
+end
+
+local function deepCopy(original)
+	local copy = {}
+	for k, v in pairs(original) do
+		if type(v) == "table" then
+			copy[k] = deepCopy(v)
+		else
+			copy[k] = v
+		end
+	end
+	return copy
+end
+
+function saveUIConfig()
+	local saveTable = {
+		toggles = {},
+		parryconfig = {},
+		sizes = {},
+		config = {},
+		glareoffsets = {},
+		UIValues = {},
+	}
+	local uisaves = {
+		{
+			{
+				[1] = "autoParry",
+				[2] = UI.GetValue("autoParry"),
+			},
+			{
+				[1] = "parry_latency",
+				[2] = UI.GetValue("parry_latency"),
+			},
+			{
+				[1] = "nameEnabled",
+				[2] = UI.GetValue("nameEnabled"),
+			},
+			{
+				[1] = "parry_cooldown",
+				[2] = UI.GetValue("parry_cooldown"),
+			},
+			{
+				[1] = "healthEnabled",
+				[2] = UI.GetValue("healthEnabled"),
+			},
+			{
+				[1] = "health_size",
+				[2] = UI.GetValue("health_size"),
+			},
+			{
+				[1] = "name_size",
+				[2] = UI.GetValue("name_size"),
+			},
+			{
+				[1] = "impact_size",
+				[2] = UI.GetValue("impact_size"),
+			},
+			{
+				[1] = "impactEnabled",
+				[2] = UI.GetValue("impactEnabled"),
+			},
+			{
+				[1] = "outline",
+				[2] = UI.GetValue("outline"),
+			},
+			{
+				[1] = "autoclick_range",
+				[2] = UI.GetValue("autoclick_range"),
+			},
+			{
+				[1] = "offset_Cross",
+				[2] = UI.GetValue("offset_Cross"),
+			},
+			{
+				[1] = "offset_SiegeGlare",
+				[2] = UI.GetValue("offset_SiegeGlare"),
+			},
+			{
+				[1] = "offset_MonarchGlare",
+				[2] = UI.GetValue("offset_MonarchGlare"),
+			},
+			{
+				[1] = "offset_PhoenixGlare",
+				[2] = UI.GetValue("offset_PhoenixGlare"),
+			},
+			{
+				[1] = "autoclick_range",
+				[2] = UI.GetValue("autoclick_range"),
+			},
+			{
+				[1] = "autoclick_toggle",
+				[2] = UI.GetValue("autoclick_toggle"),
+			},
+			{
+				[1] = "meleeap_toggle",
+				[2] = UI.GetValue("meleeap_toggle"),
+			},
+			{
+				[1] = "meleeap_range",
+				[2] = UI.GetValue("meleeap_range"),
+			},
+			{
+				[1] = "cancelaura_toggle",
+				[2] = UI.GetValue("cancelaura_toggle"),
+			},
+			{
+				[1] = "HitboxExpander",
+				[2] = UI.GetValue("HitboxExpander"),
+			},
+			{
+				[1] = "ParryExpander",
+				[2] = UI.GetValue("ParryExpander"),
+			},
+		},
+	}
+
+	--[[
+	for i, v in pairs(uisaves) do
+		table.insert(saveTable.UIValues, v)
+	end
+	]]
+	local encode = httpservice:JSONEncode(uisaves)
+	print('SAVED: '.. encode)
+	local e, r = pcall(function()
+		writefile(configName, encode)
+	end)
+	if not e then
+		local err = string.format("Failed to save configs: error (%s)", r)
+		notification(err, 6)
+	end
+end
+
+function loadConfigToUI()
+	local file
+	local e, r = pcall(function()
+		file = readfile(configName)
+		warn('LOADING: '.. file)
+		file = httpservice:JSONDecode(file)
+		
+		for _, group in pairs(file) do
+    for _, setting in pairs(group) do
+        local settingName = setting[1]
+        local settingValue = setting[2]
+
+        print(settingName, settingValue)
+        UI.SetValue(settingName, settingValue)
+    end
+end
+		
+	end)
+	if not e then
+		local err = string.format("Failed to load configs: error (%s)", r)
+		notification(err, 5)
+
+	else
+
+		loadConfig()
+	end
+end
+
+function loadConfig()
 	toggles.autoParry = UI.GetValue("autoParry") or false
 	parryConfig.latency = UI.GetValue("parry_latency") or 0
 	parryConfig.maxDist = 0 -- UI.GetValue('parry_dist') or 800
@@ -185,91 +349,124 @@ function loadMainUI()
 	glareOffsets.SiegeGlare = UI.GetValue("offset_SiegeGlare") or defaults.SiegeGlare
 	glareOffsets.MonarchGlare = UI.GetValue("offset_MonarchGlare") or defaults.MonarchGlare
 	glareOffsets.PhoenixGlare = UI.GetValue("offset_PhoenixGlare") or defaults.PhoenixGlare
-	UI.AddTab("ESP", function(tab)
-		a1 = tab
-		local sec = tab:Section("ESP Settings", "Left")
-		sec:Toggle("outline", "Text Stroke", function(val)
+
+	CONFIG.autoattackrange = UI.GetValue("autoclick_range")
+	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle")
+
+	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle")
+	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range")
+	CONFIG.CancelAuraEnabled = UI.GetValue("cancelaura_toggle")
+end
+
+function loadMainUI()
+	local parrylatency
+	local parrydist
+	local parrytoggle
+	loadConfig()
+	UI.AddTab("REDLINE - @zv12", function(tab)
+		local espsection = tab:Section("ESP Settings", "Left")
+		-- maybe one day ill turn them all into variable functions under tables for more organizations, but now.. maybe not
+		espsection:Toggle("outline", "Text Stroke", function(val)
 			toggles.outline = val
 		end)
 
-		sec:InputText("font_label", "Font: " .. FONTS[fontIndex].label, "", function() end)
-		sec:Button("Prev Font <<", function()
+		espsection:InputText("font_label", "Font: " .. FONTS[fontIndex].label, "", function() end)
+		espsection:Button("Prev Font <<", function()
 			cycleFont(-1)
 		end)
-		sec:Button("Next Font >>", function()
+		espsection:Button("Next Font >>", function()
 			cycleFont(1)
 		end)
 
-		sec:Toggle("healthEnabled", "Health ESP", function(val)
+		espsection:Toggle("healthEnabled", "Health ESP", function(val)
 			toggles.healthEnabled = val
 		end)
-		sec:SliderInt("health_size", "Health Text Size", 12, 32, sizes.health, function(val)
+		espsection:SliderInt("health_size", "Health Text Size", 12, 32, sizes.health, function(val)
 			sizes.health = val
 		end)
 
-		sec:Toggle("nameEnabled", "Name ESP", function(val)
+		espsection:Toggle("nameEnabled", "Name ESP", function(val)
 			toggles.nameEnabled = val
 		end)
-		sec:SliderInt("name_size", "Name Text Size", 12, 32, sizes.name, function(val)
+		espsection:SliderInt("name_size", "Name Text Size", 12, 32, sizes.name, function(val)
 			sizes.name = val
 		end)
 
-		sec:Toggle("impactEnabled", "Posture ESP", function(val)
+		espsection:Toggle("impactEnabled", "Posture ESP", function(val)
 			toggles.impactEnabled = val
 		end)
-		sec:SliderInt("impact_size", "Posture Text Size", 12, 32, sizes.impact, function(val)
+		espsection:SliderInt("impact_size", "Posture Text Size", 12, 32, sizes.impact, function(val)
 			sizes.impact = val
 		end)
 
-		sec:Button("Refresh Drawings", function()
+		espsection:Button("Refresh Drawings", function()
 			refreshAllDrawings()
 		end)
-	end)
+		local configsection = tab:Section("Configs", "Left")
+		configsection:Button("Load Config", loadConfigToUI)
+		configsection:Button("Save Config", saveUIConfig)
 
-	UI.AddTab("Combat", function(tab)
-		local sec = tab:Section("Gun Auto Parry (WIP)", "Left")
+		local gunapsec = tab:Section("Gun Auto Parry (WIP) 1v1s only for now", "Right", { "Gun AP", "AP Offsets (ms)" })
+		if gunapsec.page == 0 then
+			parrytoggle = gunapsec:Toggle("autoParry", "Auto Parry", function(val)
+				toggles.autoParry = val
+			end)
 
-		parrytoggle = sec:Toggle("autoParry", "Auto Parry", function(val)
-			toggles.autoParry = val
-		end)
+			parrylatency = gunapsec:SliderInt(
+				"parry_latency",
+				"ADJUST GLARE LATENCY",
+				0,
+				500,
+				parryConfig.latency,
+				function(val)
+					parryConfig.latency = val
+				end
+			)
+			gunapsec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
+				parryConfig.cooldown = val
+			end)
+		elseif gunapsec.page == 1 then
+			gunapsec:SliderInt("offset_SiegeGlare", "SiegeGlare", 500, 1000, glareOffsets["SiegeGlare"], function(val)
+				glareOffsets["SiegeGlare"] = val
+			end)
+			gunapsec:SliderInt(
+				"offset_MonarchGlare",
+				"MonarchGlare",
+				1200,
+				2000,
+				glareOffsets["MonarchGlare"],
+				function(val)
+					glareOffsets["MonarchGlare"] = val
+				end
+			)
+			gunapsec:SliderInt(
+				"offset_PhoenixGlare",
+				"PhoenixGlare",
+				600,
+				1000,
+				glareOffsets["PhoenixGlare"],
+				function(val)
+					glareOffsets["PhoenixGlare"] = val
+				end
+			)
+			gunapsec:SliderInt("offset_Cross", "CastigateGlare", 450, 1000, glareOffsets["Cross"], function(val)
+				glareOffsets["Cross"] = val
+			end)
+		end
 
-		parrylatency = sec:SliderInt("parry_latency", "ADJUST GLARE LATENCY", 0, 500, parryConfig.latency, function(val)
-			parryConfig.latency = val
-		end)
-		sec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
-			parryConfig.cooldown = val
-		end)
-
-		local aurasec = tab:Section("Aura Config", "Left")
+		local aurasec = tab:Section("Aura Config", "Right")
 		aurasec:Toggle("autoclick_toggle", "Aura")
 		aurasec:SliderInt("autoclick_range", "Aura Distance", 4, 30)
 		aurasec:Toggle("cancelaura_toggle", "Cancel aura when opp is parrying")
 		aurasec:Toggle("teamcheck_toggle", "Team Check (AURA)")
-		local sec2 = tab:Section("USE WITH CAUTION", "Left")
-		sec2:Toggle("ParryExpander", "Parry Hitbox Expander")
-		sec2:Toggle("HitboxExpander", "Hitbox Expander")
-		local meleeAP = tab:Section("Melee Auto Parry", "Left")
+
+		local hitboxsec = tab:Section("Hitbox Expanders (not dtc yet)", "Right")
+		hitboxsec:Toggle("ParryExpander", "Parry Hitbox Expander")
+		hitboxsec:Toggle("HitboxExpander", "Hitbox Expander")
+
+		local meleeAP = tab:Section("Melee Auto Parry", "Right")
 		meleeAP:Toggle("meleeap_toggle", "Melee AP")
 		meleeAP:SliderInt("meleeap_range", "Melee Detection Range (EXPENSIVE)", 8, 50, 20)
-		--[[
-		parrydist = sec:SliderInt("parry_dist", "Max Distance (0 = off)", 0, 1000, parryConfig.maxDist, function(val)
-			parryConfig.maxDist = val
-		end)
-		]]
-
-		local offsets = tab:Section("Glare Latency Offsets (ms)", "Right")
-		offsets:SliderInt("offset_SiegeGlare", "SiegeGlare", 500, 1000, glareOffsets["SiegeGlare"], function(val)
-			glareOffsets["SiegeGlare"] = val
-		end)
-		offsets:SliderInt("offset_MonarchGlare", "MonarchGlare", 1200, 2000, glareOffsets["MonarchGlare"], function(val)
-			glareOffsets["MonarchGlare"] = val
-		end)
-		offsets:SliderInt("offset_PhoenixGlare", "PhoenixGlare", 600, 1000, glareOffsets["PhoenixGlare"], function(val)
-			glareOffsets["PhoenixGlare"] = val
-		end)
-		offsets:SliderInt("offset_Cross", "CastigateGlare", 450, 1000, glareOffsets["Cross"], function(val)
-			glareOffsets["Cross"] = val
-		end)
 	end)
 end
 
@@ -526,7 +723,6 @@ end)
 local ad = "/150"
 local intervalfps = 1 / tonumber(getfenv().FPS)
 
-local nextTick = os_clock()
 local last = os_clock()
 local offsethead = Vector3.new(0, 2.5, 0)
 
@@ -594,7 +790,7 @@ local function rsloop(dt)
 		local dist
 		if CONFIG.MeleeAP then
 			dist = getDistance(player, lpHrp, targethrp)
-			local velocity = targethrp.Parent.Torso.AssemblyLinearVelocity
+
 			if dist <= CONFIG.MeleeAPRange then
 				local shouldParry = isPlayingSlash(character)
 				if shouldParry then
@@ -688,18 +884,15 @@ if RunService.RenderStepped then
 		end
 	end)
 else
-	
 	task.spawn(function()
-		warn(
-			"-= MATCHA REDLINER | RenderStepped not detected :sob:, switching to manual loop, 90 FPS UPDATE"
-		)
+		warn("-= MATCHA REDLINER | RenderStepped not detected :sob:, switching to manual loop, 90 FPS UPDATE")
 		local FPS = 90
 		local INTERVAL = 1 / FPS
 
 		local lastTime = os.clock()
 		local lastframestart = os.clock()
 		while true do
-			warn'fire'
+			warn("fire")
 			local now = os.clock()
 			local deltaTime = now - lastframestart
 			cleanupLeftPlayers()
@@ -713,7 +906,6 @@ else
 			end
 			lastTime = os.clock()
 		end
-		
 	end)
 end
 
@@ -778,12 +970,12 @@ while true do
 	if placeId == lobbyPlaceId then
 		CONFIG.autoattackenabled = false
 		CONFIG.MeleeAP = false
+		CONFIG.autoattackrange = false
+		CONFIG.autoattackenabled = false
+
+		CONFIG.MeleeAP = false
+		CONFIG.MeleeAPRange = false
+		CONFIG.CancelAuraEnabled = false
 		return
 	end
-	CONFIG.autoattackrange = UI.GetValue("autoclick_range")
-	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle")
-
-	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle")
-	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range")
-	CONFIG.CancelAuraEnabled = UI.GetValue("cancelaura_toggle")
 end
