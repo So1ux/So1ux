@@ -803,7 +803,6 @@ local function rsloop(dt)
 			if dist <= CONFIG.autoattackrange then
 				local isParrying = isOppParrying(character)
 				if isParrying and CONFIG.CancelAuraEnabled then
-					warn("continue ")
 					continue
 				end
 				if CONFIG.team_check == true then
