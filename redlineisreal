@@ -293,7 +293,7 @@ function saveUIConfig()
 	end
 	]]
 	local encode = httpservice:JSONEncode(uisaves)
-	print('SAVED: '.. encode)
+	-- print('SAVED: '.. encode)
 	local e, r = pcall(function()
 		writefile(configName, encode)
 	end)
@@ -307,7 +307,7 @@ function loadConfigToUI()
 	local file
 	local e, r = pcall(function()
 		file = readfile(configName)
-		warn('LOADING: '.. file)
+		-- warn('LOADING: '.. file)
 		file = httpservice:JSONDecode(file)
 		
 		for _, group in pairs(file) do
@@ -315,7 +315,7 @@ function loadConfigToUI()
         local settingName = setting[1]
         local settingValue = setting[2]
 
-        print(settingName, settingValue)
+        -- print(settingName, settingValue)
         UI.SetValue(settingName, settingValue)
     end
 end
