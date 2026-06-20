@@ -6,11 +6,9 @@ if not getfenv().MeleeAPUpdatePerSecond then -- lowk dont mind ts
 	getfenv().MeleeAPUpdatePerSecond = 60
 end
 ]]
-local EncodingService = game:GetService("EncodingService")
 local httpservice = game:GetService("HttpService") -- for json encode / decode only
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local visualEffects = localPlayer.PlayerGui:WaitForChild("VisualEffects")
