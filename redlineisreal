@@ -863,10 +863,12 @@ local function rsloop(dt)
 			impactLabel.Visible = false
 		end
 		if toggles.showweapon then
+			local screenPos2, onScreen2 = WorldToScreen(targethrpPosition - Vector3.new(0, 6.5, 0))
+
 			local weapon = checkWeapon(character)
 			weaponLabel.Outline = toggles.outline
 			weaponLabel.Font = currentFont
-			weaponLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + weaponLabel.Size + weaponuioffset)
+			weaponLabel.Position = Vector2.new(screenPos2.X, screenPos2.Y + CONFIG.OffsetY + weaponLabel.Size)
 			weaponLabel.Text = weapon or ""
 			weaponLabel.Visible = toggles.showweapon
 		else
