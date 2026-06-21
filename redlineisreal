@@ -75,6 +75,7 @@ local CONFIG = {
 	MeleeAPRange = 30,
 	CancelAuraEnabled = false,
 	speedmacrotoggles = false,
+	bulletdisplay = false,
 }
 
 local toggles = {
@@ -83,7 +84,7 @@ local toggles = {
 	impactEnabled = false,
 	outline = false,
 	autoParry = false,
-	
+	showweapon = false,
 }
 
 local sizes = {
@@ -142,6 +143,13 @@ local MeleeAP_Triggers = {
 local cacheduserids = {}
 local playerscache = {}
 local PlayerCacheParts = {} -- [player] = { character, hrp, readOnly, healthStat, impactStat }
+
+local weapons = {
+	"Castigate",
+	"Phoenix",
+	"Siege",
+	"Monarch",
+}
 
 local fontIndex = 1
 local currentFont = FONTS[1].value
@@ -289,6 +297,14 @@ function saveUIConfig()
 				[1] = "speedmacro_toggle",
 				[2] = UI.GetValue("speedmacro_toggle"),
 			},
+			{
+				[1] = "heatEsp",
+				[2] = UI.GetValue("heatEsp"),
+			},
+			{
+				[1] = "weaponesp_toggle",
+				[2] = UI.GetValue("weaponesp_toggle"),
+			},
 		},
 	}
 
@@ -345,6 +361,8 @@ function loadConfig()
 	sizes.impact = UI.GetValue("impact_size") or 16
 	toggles.impactEnabled = UI.GetValue("impactEnabled") or false
 	toggles.outline = UI.GetValue("outline") or false
+	toggles.showweapon = UI.GetValue("weaponesp_toggle") or false
+	CONFIG.bulletdisplay = UI.GetValue("heatEsp") or false
 	CONFIG.autoattackrange = UI.GetValue("autoclick_range") or CONFIG.autoattackrange
 
 	glareOffsets.Cross = UI.GetValue("offset_Cross") or defaults.CrossGlare
@@ -352,12 +370,12 @@ function loadConfig()
 	glareOffsets.MonarchGlare = UI.GetValue("offset_MonarchGlare") or defaults.MonarchGlare
 	glareOffsets.PhoenixGlare = UI.GetValue("offset_PhoenixGlare") or defaults.PhoenixGlare
 
-	CONFIG.autoattackrange = UI.GetValue("autoclick_range")
-	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle")
+	CONFIG.autoattackrange = UI.GetValue("autoclick_range") or 16
+	CONFIG.autoattackenabled = UI.GetValue("autoclick_toggle") or false
 
-	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle")
-	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range")
-	CONFIG.CancelAuraEnabled = UI.GetValue("cancelaura_toggle")
+	CONFIG.MeleeAP = UI.GetValue("meleeap_toggle") or false
+	CONFIG.MeleeAPRange = UI.GetValue("meleeap_range") or 16
+	CONFIG.CancelAuraEnabled = UI.GetValue("cancelaura_toggle") or false
 end
 
 function loadMainUI()
@@ -380,6 +398,9 @@ function loadMainUI()
 		espsection:Toggle("healthEnabled", "Health ESP", function(val)
 			toggles.healthEnabled = val
 		end)
+		espsection:Toggle("heatEsp", "Show Bullets", function(val)
+			CONFIG.bulletdisplay = val
+		end)
 		espsection:SliderInt("health_size", "Health Text Size", 12, 32, sizes.health, function(val)
 			sizes.health = val
 		end)
@@ -398,6 +419,9 @@ function loadMainUI()
 			sizes.impact = val
 		end)
 
+		espsection:Toggle("weaponesp_toggle", "Weapon ESP (tanks matcha fps GULP)", function(val)
+			toggles.showweapon = val
+		end)
 		espsection:Button("Refresh Drawings", function()
 			refreshAllDrawings()
 		end)
@@ -508,9 +532,17 @@ local function getOrCreateESP(player)
 		impactLabel.Center = true
 		impactLabel.Outline = toggles.outline
 		impactLabel.Size = sizes.impact
-		impactLabel.Color = Color3.fromRGB(180, 140, 255)
+		impactLabel.Color = Color3.fromRGB(158, 113, 243)
 
-		espObjects[player.Name] = { label = label, nameLabel = nameLabel, impactLabel = impactLabel }
+		local weaponLabel = Drawing.new("Text")
+		weaponLabel.Visible = true
+		weaponLabel.Center = true
+		weaponLabel.Outline = toggles.outline
+		weaponLabel.Size = 18
+		weaponLabel.Color = Color3.fromRGB(179, 161, 4)
+
+		espObjects[player.Name] =
+			{ label = label, nameLabel = nameLabel, impactLabel = impactLabel, weaponlabel = weaponLabel }
 	end
 	return espObjects[player.Name]
 end
@@ -526,6 +558,7 @@ local function cleanupLeftPlayers()
 			esp.label:Remove()
 			esp.nameLabel:Remove()
 			esp.impactLabel:Remove()
+			esp.weaponLabel:Remove()
 			espObjects[player] = nil
 		end
 	end
@@ -709,10 +742,28 @@ local function getCachedData(player)
 			data.readOnly = readOnly
 			data.healthStat = findFirstChild(readOnly, "health")
 			data.impactStat = findFirstChild(readOnly, "impact")
+			data.heatStat = findFirstChild(readOnly, "heat")
+			data.heatPerBullet = findFirstChild(readOnly, "heat_per_bullet")
+			data.maxHeat = findFirstChild(readOnly, "heat_max")
 		end
 	end
 
 	return data
+end
+local function getRemainingBullets(heat, perbullet, maxheat)
+	local currentBullets = math.floor(heat / perbullet)
+	local maxBullets = math.floor(maxheat / perbullet)
+
+	return string.format("[%d/%d]", currentBullets, maxBullets)
+end
+local function checkWeapon(character)
+	for i, v in pairs(weapons) do
+		local weapon = character:FindFirstChild(v)
+		if weapon then
+			return v
+		end
+	end
+	return nil
 end
 
 repeat
@@ -729,7 +780,7 @@ local intervalfps = 1 / tonumber(getfenv().FPS)
 local last = os_clock()
 local offsethead = Vector3.new(0, 2.5, 0)
 
-local d1, d2, d3 = 1000, 0.5, 2 -- pre defining numbers for maximum performance :sob:
+local d1, d2, d3, weaponuioffset = 1000, 0.5, 2, 100 -- pre defining numbers for maximum performance :sob:
 
 -- Main loop
 
@@ -744,12 +795,16 @@ local function rsloop(dt)
 		local label = esp.label
 		local nameLabel = esp.nameLabel
 		local impactLabel = esp.impactLabel
+		local weaponLabel = esp.weaponlabel
 
 		local character = player.Character
 		local data = getCachedData(player)
 		local targethrp = data.hrp
 		local health = data.healthStat and data.healthStat.Value
 		local impact = data.impactStat and data.impactStat.Value
+		local heatStat, heatPerBullet, maxHeat = data.heatStat, data.heatPerBullet, data.maxHeat
+
+		local bullet = ""
 
 		if not targethrp or not health then
 			label.Visible = false
@@ -765,31 +820,58 @@ local function rsloop(dt)
 			label.Visible = false
 			nameLabel.Visible = false
 			impactLabel.Visible = false
+			weaponLabel.Visible = false
 			continue
 		end
+		if CONFIG.bulletdisplay then
+			if heatStat and heatPerBullet and maxHeat then
+				bullet = getRemainingBullets(heatStat.Value, heatPerBullet.Value, maxHeat.Value)
+			end
+		end
+		if toggles.healthEnabled then
+			label.Outline = toggles.outline
+			label.Size = sizes.health
+			label.Font = currentFont
+			label.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY)
+			label.Text = tostring(health) .. ad .. " " .. bullet
+			label.Color = getHealthColor(health)
+			label.Visible = toggles.healthEnabled
+		else
+			label.Visible = false
+		end
 
-		label.Outline = toggles.outline
-		label.Size = sizes.health
-		label.Font = currentFont
-		label.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY)
-		label.Text = tostring(health) .. ad
-		label.Color = getHealthColor(health)
-		label.Visible = toggles.healthEnabled
+		if toggles.nameEnabled then
+			nameLabel.Outline = toggles.outline
+			nameLabel.Size = sizes.name
+			nameLabel.Font = currentFont
+			nameLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY - sizes.name - d3)
+			nameLabel.Text = player.Name
+			nameLabel.Visible = toggles.nameEnabled
+		else
+			nameLabel.Visible = false
+		end
 
-		nameLabel.Outline = toggles.outline
-		nameLabel.Size = sizes.name
-		nameLabel.Font = currentFont
-		nameLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY - sizes.name - d3)
-		nameLabel.Text = player.Name
-		nameLabel.Visible = toggles.nameEnabled
-
-		local impactRounded = impact and math_floor(impact * d1 + d2) / d1 or 0
-		impactLabel.Outline = toggles.outline
-		impactLabel.Size = sizes.impact
-		impactLabel.Font = currentFont
-		impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + d3)
-		impactLabel.Text = "" .. string.format("%.3g", impactRounded)
-		impactLabel.Visible = toggles.impactEnabled
+		if toggles.impactEnabled then
+			local impactRounded = impact and math_floor(impact * d1 + d2) / d1 or 0
+			impactLabel.Outline = toggles.outline
+			impactLabel.Size = sizes.impact
+			impactLabel.Font = currentFont
+			impactLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + sizes.health + d3)
+			impactLabel.Text = "" .. string.format("%.3g", impactRounded)
+			impactLabel.Visible = toggles.impactEnabled
+		else
+			impactLabel.Visible = false
+		end
+		if toggles.showweapon then
+			local weapon = checkWeapon(character)
+			weaponLabel.Outline = toggles.outline
+			weaponLabel.Font = currentFont
+			weaponLabel.Position = Vector2.new(screenPos.X, screenPos.Y + CONFIG.OffsetY + weaponLabel.Size + weaponuioffset)
+			weaponLabel.Text = weapon or ""
+			weaponLabel.Visible = toggles.showweapon
+		else
+			weaponLabel.Visible = false
+		end
 		local dist
 		if CONFIG.MeleeAP then
 			dist = getDistance(player, lpHrp, targethrp)
@@ -986,7 +1068,7 @@ else
 end
 while true do
 	task.wait(1)
-	
+
 	localPlayerTeam = getTeam(localPlayer)
 	if UI.GetValue("HitboxExpander") == true then
 		for i, v in pairs(getPlayers()) do
