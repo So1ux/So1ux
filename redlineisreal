@@ -538,7 +538,7 @@ local function getOrCreateESP(player)
 		weaponLabel.Visible = true
 		weaponLabel.Center = true
 		weaponLabel.Outline = toggles.outline
-		weaponLabel.Size = 18
+		weaponLabel.Size = 12
 		weaponLabel.Color = Color3.fromRGB(179, 161, 4)
 
 		espObjects[player.Name] =
@@ -754,10 +754,7 @@ local function getRemainingBullets(heat, perbullet, maxheat)
 	local currentBullets = math.floor(heat / perbullet)
 	local maxBullets = math.floor(maxheat / perbullet)
 
-	return string.format("[%d/%d]", currentBullets, maxBullets)
-end
-local function checkWeapon(character)
-	for i, v in pairs(weapons) do
+	return string.format("[%d/%d]", currentBullets, maxBullets)56e5
 		local weapon = character:FindFirstChild(v)
 		if weapon then
 			return v
@@ -780,7 +777,7 @@ local intervalfps = 1 / tonumber(getfenv().FPS)
 local last = os_clock()
 local offsethead = Vector3.new(0, 2.5, 0)
 
-local d1, d2, d3, weaponuioffset = 1000, 0.5, 2, 100 -- pre defining numbers for maximum performance :sob:
+local d1, d2, d3, weaponuioffset = 1000, 0.5, 2, 75 -- pre defining numbers for maximum performance :sob:
 
 -- Main loop
 
