@@ -542,7 +542,7 @@ local function getOrCreateESP(player)
 		weaponLabel.Color = Color3.fromRGB(179, 161, 4)
 
 		espObjects[player.Name] =
-			{ label = label, nameLabel = nameLabel, impactLabel = impactLabel, weaponlabel = weaponLabel }
+			{ label = label, nameLabel = nameLabel, impactLabel = impactLabel, weaponLabel = weaponLabel }
 	end
 	return espObjects[player.Name]
 end
@@ -795,7 +795,7 @@ local function rsloop(dt)
 		local label = esp.label
 		local nameLabel = esp.nameLabel
 		local impactLabel = esp.impactLabel
-		local weaponLabel = esp.weaponlabel
+		local weaponLabel = esp.weaponLabel
 
 		local character = player.Character
 		local data = getCachedData(player)
