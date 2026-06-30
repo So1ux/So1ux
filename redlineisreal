@@ -43,13 +43,14 @@ local configName = "redlinezv12.json"
 
 local keys = {}
 local keybind_macrospeed = "R"
+local gunApParryTags = {}
+
 keys.leftshift = 0x10
 keys.s = 0x53
 keys.spacebar = 0x20
 keys.w = 0x57
 
-local animReader =
-	loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/matcha_animreader"))()
+local animReader = loadstring(game:HttpGet("https://raw.githubusercontent.com/So1ux/So1ux/refs/heads/main/matcha_animreader"))()
 animReader = _G.GetPlayingAnims
 
 -- local warn = function() end local print = function() end
@@ -138,6 +139,9 @@ local MeleeAP_Triggers = {
 	"rbxassetid://71188211641772",
 	"rbxassetid://87457990259233",
 	"rbxassetid://105441036119013",
+}
+local GunAP_Triggers = {
+	["Castigate"] = "rbxassetid://124492122976293",
 }
 
 local cacheduserids = {}
@@ -430,12 +434,13 @@ function loadMainUI()
 		configsection:Button("Load Config", loadConfigToUI)
 		configsection:Button("Save Config", saveUIConfig)
 
-		local gunapsec = tab:Section("Gun Auto Parry (WIP) 1v1s only for now", "Right", { "Gun AP", "AP Offsets (ms)" })
+		local gunapsec = tab:Section("Gun Auto Parry", "Right", { "Gun AP", "AP Offsets (ms)" })
 		if gunapsec.page == 0 then
-			parrytoggle = gunapsec:Toggle("autoParry", "Auto Parry", function(val)
+			gunapsec:Toggle("autoParry", "Auto Parry", function(val)
 				toggles.autoParry = val
 			end)
-
+			gunapsec:Toggle("autoparrypingtoggle", "Adjust to ping [DISABLED FOR NOW]")
+			--[[
 			parrylatency = gunapsec:SliderInt(
 				"parry_latency",
 				"ADJUST GLARE LATENCY",
@@ -446,10 +451,15 @@ function loadMainUI()
 					parryConfig.latency = val
 				end
 			)
+			]]
+			--[[
 			gunapsec:SliderInt("parry_cooldown", "Parry Cooldown (ms)", 50, 1000, parryConfig.cooldown, function(val)
 				parryConfig.cooldown = val
 			end)
+			]]
 		elseif gunapsec.page == 1 then
+			gunapsec:Text("Nothing here yet")
+			--[[
 			gunapsec:SliderInt("offset_SiegeGlare", "SiegeGlare", 500, 1000, glareOffsets["SiegeGlare"], function(val)
 				glareOffsets["SiegeGlare"] = val
 			end)
@@ -476,6 +486,7 @@ function loadMainUI()
 			gunapsec:SliderInt("offset_Cross", "CastigateGlare", 450, 1000, glareOffsets["Cross"], function(val)
 				glareOffsets["Cross"] = val
 			end)
+			]]
 		end
 
 		local aurasec = tab:Section("Aura Config", "Right")
@@ -565,12 +576,6 @@ local function cleanupLeftPlayers()
 end
 
 local function getDistance(otherPlayer, root1, root2)
-	local char1 = localPlayer.Character
-	local char2 = otherPlayer.Character
-	if not char1 or not char2 then
-		return math_huge
-	end
-
 	local root1 = root1 -- findFirstChild(char1, "HumanoidRootPart")
 	local root2 = root2
 	if not root1 or not root2 then
@@ -658,7 +663,7 @@ end
 
 local function pressParry()
 	keypress(0x46)
-	task.wait()
+	task.wait(.01)
 	keyrelease(0x46)
 end
 
@@ -766,6 +771,41 @@ local function checkWeapon(character)
 	return nil
 end
 
+local function isLooking(part1, part2, ignoreY) -- checks if part 1  looks at part 2, ignoreY is default on true
+	ignoreY = ((ignoreY~=nil) and ignoreY) or true
+	local p1pos = nil
+	local p2pos = nil
+	if ignoreY then
+		-- could do p1pos = part1.Position * Vector3.new(1, 0, 1) but idk whats better performance wise, could also pre define Vector3.new(1, 0, 1) so i dont have to construct new vectors, i havent benchmarked tho
+		local pos1 = part1.Position
+		local pos2 = part2.Position
+		p1pos = Vector3.new(pos1.X, 0, pos1.Z)
+		p2pos = Vector3.new(pos2.X, 0, pos2.Z)
+	else
+		p1pos = part1.Position
+		p2pos = part2.Position
+	end
+	local directionToPart2 = (p2pos - p1pos).Unit
+	local dot = part1.CFrame.LookVector:Dot(directionToPart2)
+	
+	-- 1 = directly looking at player
+	-- 0 = 90 degrees away
+	-- -1 = looking directly away
+	return dot > 0.75
+end
+
+local function checkIfPlayingGun(character)
+	local data = animReader(character)
+	if data then
+		for i, v in pairs(data) do
+		if v.id == GunAP_Triggers.Castigate then
+			return 'Castigate', v.timePos
+		end
+	end
+	end
+	return nil
+end
+
 repeat
 	task.wait(0.1)
 until keyUnlocked == true
@@ -779,6 +819,7 @@ local intervalfps = 1 / tonumber(getfenv().FPS)
 
 local last = os_clock()
 local offsethead = Vector3.new(0, 2.5, 0)
+local parryRange = 750
 
 local d1, d2, d3, weaponuioffset = 1000, 0.5, 2, 80 -- pre defining numbers for maximum performance :sob:
 
@@ -874,9 +915,34 @@ local function rsloop(dt)
 		else
 			weaponLabel.Visible = false
 		end
-		local dist
+		local dist = nil
+
+		if toggles.autoParry then -- GUN AP
+			if not dist then
+				dist = getDistance(player, lpHrp, targethrp)
+			end
+			if dist <= parryRange then
+				local check, timepos = checkIfPlayingGun(character)
+				if check then
+					if check == 'Castigate' then
+						if timepos > 0.3 then
+							local looking = isLooking(targethrp, lpHrp, true)
+						if looking then
+							local canParry = ((not gunApParryTags[targethrp.Address]) and true) or (os.clock() - gunApParryTags[targethrp.Address] > 1)
+							if canParry then
+								gunApParryTags[targethrp.Address] = os.clock()
+								pressParry()
+							end
+						end
+						end
+					end
+				end
+			end
+		end
 		if CONFIG.MeleeAP then
-			dist = getDistance(player, lpHrp, targethrp)
+			if not dist then
+				dist = getDistance(player, lpHrp, targethrp)
+			end
 
 			if dist <= CONFIG.MeleeAPRange then
 				local shouldParry = isPlayingSlash(character)
@@ -886,7 +952,10 @@ local function rsloop(dt)
 			end
 		end
 		if CONFIG.autoattackenabled then
-			dist = getDistance(player, lpHrp, targethrp)
+			if not dist then
+				dist = getDistance(player, lpHrp, targethrp)
+			end
+
 			if dist <= CONFIG.autoattackrange then
 				local isParrying = isOppParrying(character)
 				if isParrying and CONFIG.CancelAuraEnabled then
@@ -902,6 +971,7 @@ local function rsloop(dt)
 			end
 		end
 	end
+	--[[ -- my extremely outdated, rushed gun ap D:
 	if toggles.autoParry then
 		if visualEffects then
 			for _, child in ipairs(visualEffects:GetChildren()) do
@@ -917,11 +987,7 @@ local function rsloop(dt)
 						warn(child.Address)
 						warn("attempt parry", child.Name)
 						tryParry(child, tostring(child.Address))
-						--[[
-						seenIndicators[child.Address] = os_clock()
-						warn('attempt parry', child.Name)
-						tryParry(child)
-						]]
+						
 					end
 				end
 			end
@@ -955,6 +1021,7 @@ local function rsloop(dt)
 		seenIndicators = {}
 		parryActive = false
 	end
+	]]
 end
 
 local function performSpeedMacro()
