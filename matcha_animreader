@@ -4,210 +4,228 @@ local response = game:HttpGet(Url)
 local offsets = HttpService:JSONDecode(response).Offsets
 
 local KnownOffsets = {
-    ["AnimationId"] = offsets.Misc.AnimationId,
-    ["ClassDescriptor"] = offsets.Instance.ClassDescriptor, -- const
-    ["ClassDescriptorToClassName"] = offsets.Instance.ClassName, -- const
+	["AnimationId"] = offsets.Misc.AnimationId,
+	["ClassDescriptor"] = offsets.Instance.ClassDescriptor, -- const
+	["ClassDescriptorToClassName"] = offsets.Instance.ClassName, -- const
 	["Name"] = offsets.Instance.Name, -- const
 	["TimePosition"] = 0xE8,
 	["ActiveAnimations"] = offsets.Animator.ActiveAnimations, -- const
-    -- Node Structure
-    ["NodeNext"] = 0x10,
+	-- Node Structure
+	["NodeNext"] = 0x10,
 }
 
-
-
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 -- === Helpers
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 
 local function ReadString(address)
-    if not address or address <= 4096 then return nil end
-    local success, str = pcall(function() return memory_read("string", address) end)
-    return success and str or nil
+	if not address or address <= 4096 then
+		return nil
+	end
+	local success, str = pcall(function()
+		return memory_read("string", address)
+	end)
+	return success and str or nil
 end
 
 local function ReadPointer(address)
-    local success, value = pcall(function()
-        return memory_read("uintptr_t", address)
-    end)
-    if success and value and value > 4096 then
-        return value
-    end
-    return nil
+	local success, value = pcall(function()
+		return memory_read("uintptr_t", address)
+	end)
+	if success and value and value > 4096 then
+		return value
+	end
+	return nil
 end
 
 local function GetClassName(instanceAddress)
-    if not instanceAddress or instanceAddress <= 4096 then return "Invalid" end
-    
-    local descriptor = ReadPointer(instanceAddress + KnownOffsets.ClassDescriptor)
-    if descriptor then
-        local namePtr = ReadPointer(descriptor + KnownOffsets.ClassDescriptorToClassName)
-        return ReadString(namePtr) or "Unknown"
-    end
-    
-    return "Error"
+	if not instanceAddress or instanceAddress <= 4096 then
+		return "Invalid"
+	end
+
+	local descriptor = ReadPointer(instanceAddress + KnownOffsets.ClassDescriptor)
+	if descriptor then
+		local namePtr = ReadPointer(descriptor + KnownOffsets.ClassDescriptorToClassName)
+		return ReadString(namePtr) or "Unknown"
+	end
+
+	return "Error"
 end
 
 local function GetIdFromTrack(trackAddress)
-   -- We scan the track for the "Animation" object property
-  -- for animOffset = 0, 256, 8 do
-    local potentialAnim = ReadPointer(trackAddress + offsets.AnimationTrack.Animation) -- Idk if this is constant
+	-- We scan the track for the "Animation" object property
+	-- for animOffset = 0, 256, 8 do
+	local potentialAnim = ReadPointer(trackAddress + offsets.AnimationTrack.Animation) -- Idk if this is constant
 
-    if potentialAnim and GetClassName(potentialAnim) == "Animation" then
-        local idPtr = ReadPointer(potentialAnim + KnownOffsets.AnimationId)
+	if potentialAnim and GetClassName(potentialAnim) == "Animation" then
+		local idPtr = ReadPointer(potentialAnim + KnownOffsets.AnimationId)
 		local namePtr = ReadPointer(potentialAnim + KnownOffsets.Name)
 
 		local nameStr = ReadString(namePtr)
-        local idStr = ReadString(idPtr)
+		local idStr = ReadString(idPtr)
 
-        if idStr then 
-            return idStr, nameStr
-        end
-    end
---    end
-    return "N/A"
+		if idStr then
+			return idStr, nameStr
+		end
+	end
+	--    end
+	return "N/A"
 end
 
 local function GetAnimatorAddress(Character)
-    if not Character or Character.Address == 0 then return nil end
+	if not Character or Character.Address == 0 then
+		return nil
+	end
 
-    local Humanoid = Character:FindFirstChild("Humanoid")
-    if not Humanoid then return nil end
+	local Humanoid = Character:FindFirstChild("Humanoid")
+	if not Humanoid then
+		return nil
+	end
 
-    local Animator = Humanoid:FindFirstChild("Animator")
-    return Animator and Animator.Address or nil
+	local Animator = Humanoid:FindFirstChild("Animator")
+	return Animator and Animator.Address or nil
 end
 
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 -- === Scanning
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 
 local function ScanAnimatorForActiveOffset(animatorAddress)
-    local Start = 0
-    local End = 2048 
-    local Step = 8 
+	local Start = 0
+	local End = 2048
+	local Step = 8
 
-  --  for offset = Start, End, Step do 
-        -- 1. Read the potential Head
-        local listHead = ReadPointer(animatorAddress + KnownOffsets.ActiveAnimations)
-        
-        if listHead then
-            -- 2. Read the potential first Node
-            local firstNode = ReadPointer(listHead)
-            
-            -- If firstNode points back to Head, the list is empty (valid but useless)
-            if firstNode and firstNode ~= listHead then
-                
-                -- 3. Read the potential AnimationTrack at + 16
-                local animationTrack = ReadPointer(firstNode + KnownOffsets.NodeNext)
-                
-                if animationTrack then
-                    local name = GetClassName(animationTrack)
-                    
-                    if name == "AnimationTrack" then
-                    --    print(string.format("Match Found at Offset: %d (0x%X)", offset, offset))
-                     --   print(string.format("Head: 0x%X | Node: 0x%X | Track: 0x%X", listHead, firstNode, animationTrack))
-                        
-                        return animationTrack, firstNode, listHead, offset
-                    end
-                end
-            end
-        end
---    end
+	--  for offset = Start, End, Step do
+	-- 1. Read the potential Head
+	local listHead = ReadPointer(animatorAddress + KnownOffsets.ActiveAnimations)
 
+	if listHead then
+		-- 2. Read the potential first Node
+		local firstNode = ReadPointer(listHead)
 
-    return nil 
+		-- If firstNode points back to Head, the list is empty (valid but useless)
+		if firstNode and firstNode ~= listHead then
+			-- 3. Read the potential AnimationTrack at + 16
+			local animationTrack = ReadPointer(firstNode + KnownOffsets.NodeNext)
+
+			if animationTrack then
+				local name = GetClassName(animationTrack)
+
+				if name == "AnimationTrack" then
+					--    print(string.format("Match Found at Offset: %d (0x%X)", offset, offset))
+					--   print(string.format("Head: 0x%X | Node: 0x%X | Track: 0x%X", listHead, firstNode, animationTrack))
+
+					return animationTrack, firstNode, listHead, offset
+				end
+			end
+		end
+	end
+	--    end
+
+	return nil
 end
 
 local function ScanTrackForProperties(trackAddress)
-    if not trackAddress or trackAddress <= 4096 then return end
+	if not trackAddress or trackAddress <= 4096 then
+		return
+	end
 
- --   print(string.format("--- Scanning Properties for Track: 0x%X ---", trackAddress))
-    
-    for offset = 0, 1024, 4 do
-        local success, value = pcall(function() 
-            return memory_read("float", trackAddress + offset) 
-        end)
+	--   print(string.format("--- Scanning Properties for Track: 0x%X ---", trackAddress))
 
-        if success and value then
-            if value == 1.0 then
-                print(string.format("[Potential Property] Offset: 0x%X (Value: %.2f)", offset, value))
-            elseif value > 0.001 and value <= 1.01 then
+	for offset = 0, 1024, 4 do
+		local success, value = pcall(function()
+			return memory_read("float", trackAddress + offset)
+		end)
+
+		if success and value then
+			if value == 1.0 then
+				print(string.format("[Potential Property] Offset: 0x%X (Value: %.2f)", offset, value))
+			elseif value > 0.001 and value <= 1.01 then
 				print(string.format("[Active Value] Offset: 0x%X (Value: %.4f)", offset, value))
-            end
-        end
-    end
-   -- print("--- Scan Complete ---")
+			end
+		end
+	end
+	-- print("--- Scan Complete ---")
 end
 
-
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 -- === Main Logic
--- === === === === === === === === === === === === === === === === === === === === === === === === === === === -- 
+-- === === === === === === === === === === === === === === === === === === === === === === === === === === === --
 
 local function GetPlayingAnimationTracks(Character)
-    local AnimatorAddress = GetAnimatorAddress(Character)
-    if not AnimatorAddress then 
-        print("Failed to resolve Animator.")
-        return 
-    end
+	local AnimatorAddress = GetAnimatorAddress(Character)
+	if not AnimatorAddress then
+		print("Failed to resolve Animator.")
+		return
+	end
 
+	local _, firstNode, listHead, activeOffset = ScanAnimatorForActiveOffset(AnimatorAddress)
 
-    local _, firstNode, listHead, activeOffset = ScanAnimatorForActiveOffset(AnimatorAddress)
-    
-    if not firstNode then 
-        print("No active animation list found.")
-        return 
-    end
+	if not firstNode then
+		print("No active animation list found.")
+		return
+	end
 
-    local currentNode = firstNode
-    local foundCount = 0
+	local currentNode = firstNode
+	local foundCount = 0
 	local AnimationTracks = {}
 
-  --  print(string.format("--- Scanning Animations (Offset 0x%X) ---", activeOffset))
+	--  print(string.format("--- Scanning Animations (Offset 0x%X) ---", activeOffset))
 
-    while currentNode and currentNode ~= 0 and currentNode ~= listHead do
+	while currentNode and currentNode ~= 0 and currentNode ~= listHead do
+		local track = ReadPointer(currentNode + KnownOffsets.NodeNext)
 
-        local track = ReadPointer(currentNode + KnownOffsets.NodeNext)
-        
-
-        if track and GetClassName(track) == "AnimationTrack" then
-            foundCount = foundCount + 1
+		if track and GetClassName(track) == "AnimationTrack" then
+			foundCount = foundCount + 1
 			table.insert(AnimationTracks, track)
-        end
+		end
 
-        -- Step to next node
-        currentNode = ReadPointer(currentNode)
-        
+		-- Step to next node
+		currentNode = ReadPointer(currentNode)
 
-        if foundCount > 50 then break end
-    end
+		if foundCount > 50 then
+			break
+		end
+	end
 
- --   print(string.format("--- Done. Total Active: %d ---", foundCount))
+	--   print(string.format("--- Done. Total Active: %d ---", foundCount))
 	return AnimationTracks
 end
 
+--[[
 local function PrintTrackData(index, trackOffset)
-    local animId, animName = GetIdFromTrack(trackOffset)
+	local animId, animName = GetIdFromTrack(trackOffset)
 	local timepos = memory_read("float", trackOffset + KnownOffsets.TimePosition)
-	print(string.format("[%d] Track: %X | ID: %s | Time Position: %.3f | Name: %s", index, trackOffset, animId, timepos, animName))
+	print(
+		string.format(
+			"[%d] Track: %X | ID: %s | Time Position: %.3f | Name: %s",
+			index,
+			trackOffset,
+			animId,
+			timepos,
+			animName
+		)
+	)
 	ScanTrackForProperties(track)
 end
 
+]]
 local function GetPlayingAnims(character)
-    local animsPlaying = {}
-    local TracksPlaying = GetPlayingAnimationTracks(character)
-    
-    for i, trackAddress in pairs(TracksPlaying) do
-        local animId, animName = GetIdFromTrack(trackAddress)
-        local timePos = memory_read("float", trackAddress + KnownOffsets.TimePosition)
-        animsPlaying[#animsPlaying+1] = {
-            id = animId,
-            name = animName,
-            timePos = timePos,
-        }
-    end
-    return animsPlaying
+	local animsPlaying = {}
+	local TracksPlaying = GetPlayingAnimationTracks(character)
+
+	if TracksPlaying then -- aaaa
+		for i, trackAddress in pairs(TracksPlaying) do
+			local animId, animName = GetIdFromTrack(trackAddress)
+			local timePos = memory_read("float", trackAddress + KnownOffsets.TimePosition)
+			animsPlaying[#animsPlaying + 1] = {
+				id = animId,
+				name = animName,
+				timePos = timePos,
+			}
+		end
+	end
+	return animsPlaying
 end
 
 --[[
