@@ -162,7 +162,7 @@ local function GetPlayingAnimationTracks(Character)
 	local _, firstNode, listHead, activeOffset = ScanAnimatorForActiveOffset(AnimatorAddress)
 
 	if not firstNode then
-		print("No active animation list found.")
+		-- print("No active animation list found.")
 		return
 	end
 
