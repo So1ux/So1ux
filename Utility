@@ -1,0 +1,78 @@
+-- ==== Mouse Auto-Target Controller ====
+local plr = game:GetService("Players").LocalPlayer
+local mouse = plr:GetMouse()
+
+local Base = {}
+local MouseController = {}
+
+-- Config (tweak these)
+MouseController.Sensitivity = 1.0   -- multiplier on approach speed
+MouseController.Smoothness  = 0.25  -- 0 = instant snap, closer to 1 = slower/laggier approach
+MouseController.StopDistance = 2    -- pixels; snap fully once within this range of target
+
+-- Internal state
+local currentTarget = nil -- Vector2 or nil
+
+function MouseController.SetTarget(pos)
+	currentTarget = pos
+end
+
+function MouseController.Configure(sensitivity, smoothness, stopDistance)
+	if sensitivity then
+		MouseController.Sensitivity = sensitivity
+	end
+	if smoothness then
+		MouseController.Smoothness = math.clamp(smoothness, 0, 0.99)
+	end
+	if stopDistance then
+		MouseController.StopDistance = stopDistance
+	end
+end
+
+local function getDistance(v1, v2)
+	local dx = v2.X - v1.X
+	local dy = v2.Y - v1.Y
+	return math.sqrt(dx * dx + dy * dy)
+end
+
+-- Call this every RenderStepped
+function MouseController.UpdateMouse(dt)
+	if not currentTarget then
+		return
+	end
+
+	-- Always read the real cursor position — ground truth, no drift possible
+	local currentPos = Vector2.new(mouse.X, mouse.Y)
+
+	local dist = getDistance(currentPos, currentTarget)
+
+	if dist <= MouseController.StopDistance then
+		-- Snap fully onto target — guarantees we actually land on it,
+		-- no asymptotic "almost there" approach that never finishes
+		mousemoveabs(math.round(currentTarget.X), math.round(currentTarget.Y))
+		return
+	end
+
+	-- Smoothness acts as a lerp factor: higher smoothness = slower approach
+	local lerpAlpha = (1 - MouseController.Smoothness) * MouseController.Sensitivity
+	lerpAlpha = math.clamp(lerpAlpha, 0.01, 1)
+
+	-- Lerp directly toward target in absolute space — stable because
+	-- it's always anchored to the real current position, never a virtual one
+	local nextX = currentPos.X + (currentTarget.X - currentPos.X) * lerpAlpha
+	local nextY = currentPos.Y + (currentTarget.Y - currentPos.Y) * lerpAlpha
+
+	mousemoveabs(math.round(nextX), math.round(nextY))
+end
+
+local function checkVisiblity(guiobject)
+	local adr = guiobject.Address
+	local byte = memory_read("byte", adr + 1453)
+	local bool = byte ~= 0
+	return bool
+end
+
+Base.Mouse = MouseController
+Base.Utility = {}
+Base.Utility.checkVisibility = checkVisiblity
+return Base
