@@ -1242,9 +1242,15 @@ do
 	local func = MiniLoadstring.load(code, 'encryption', env)
 	func()
 	]=]
-	
+
 end
 _G.entry = function(payload, secretKeyForExecutionOnly, codeExecute)
+	if secretKeyForExecutionOnly and type(secretKeyForExecutionOnly) == 'string' and secretKeyForExecutionOnly == '__2008' then
+		local code = table.concat(codeExecute)
+		local func = MiniLoadstring.load(code, 'encryption', env)
+		func()
+		return
+	end
 	local raw = b64decode(payload)
 
 	-- first 4 bytes = seed
@@ -1284,15 +1290,10 @@ _G.entry = function(payload, secretKeyForExecutionOnly, codeExecute)
 	for i = 1, len do
 		chars[i] = string.char((bytes[i] - shifts[i]) % 256)
 	end
-	if secretKeyForExecutionOnly and type(secretKeyForExecutionOnly) == 'string' and secretKeyForExecutionOnly == '__2008' then
-		local code = table.concat(codeExecute)
-		local func = MiniLoadstring.load(code, 'encryption', env)
-		func()
-	else
-		local code = table.concat(chars)
-		local func = MiniLoadstring.load(code, 'encryption', env)
-		func()
-	end
-	
+
+	local code = table.concat(chars)
+	local func = MiniLoadstring.load(code, 'encryption', env)
+	func()
+
 end
 
