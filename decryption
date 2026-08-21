@@ -1,0 +1,108 @@
+local function newRNG(seed)
+	seed = math.floor(seed) % 2147483647
+	if seed <= 0 then seed = seed + 2147483646 end
+	return function(min, max)
+		seed = (seed * 16807) % 2147483647
+		if min and max then
+			return min + (seed % (max - min + 1))
+		end
+		return seed
+	end
+end
+
+--------------------------------------------------
+-- Base64 (standard alphabet)
+--------------------------------------------------
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+local function b64encode(data)
+	local out = {}
+	for i = 1, #data, 3 do
+		local a, b, c = data:byte(i, i + 2)
+		b = b or 0
+		c = c or 0
+		local n = a * 65536 + b * 256 + c
+
+		local c1 = math.floor(n / 262144) % 64
+		local c2 = math.floor(n / 4096) % 64
+		local c3 = math.floor(n / 64) % 64
+		local c4 = n % 64
+
+		local chunkLen = #data - i + 1
+		out[#out+1] = B64:sub(c1+1, c1+1)
+		out[#out+1] = B64:sub(c2+1, c2+1)
+		out[#out+1] = (chunkLen >= 2) and B64:sub(c3+1, c3+1) or "="
+		out[#out+1] = (chunkLen >= 3) and B64:sub(c4+1, c4+1) or "="
+	end
+	return table.concat(out)
+end
+
+local function b64decode(str)
+	str = str:gsub("[^%w%+%/%=]", "")
+	local out = {}
+	for i = 1, #str, 4 do
+		local c1 = B64:find(str:sub(i, i), 1, true) or 1
+		local c2 = B64:find(str:sub(i+1, i+1), 1, true) or 1
+		local s3, s4 = str:sub(i+2, i+2), str:sub(i+3, i+3)
+		local c3 = B64:find(s3, 1, true)
+		local c4 = B64:find(s4, 1, true)
+
+		local n = (c1-1) * 262144 + (c2-1) * 4096
+		n = n + ((c3 and (c3-1) or 0) * 64) + (c4 and (c4-1) or 0)
+
+		local b1 = math.floor(n / 65536) % 256
+		local b2 = math.floor(n / 256) % 256
+		local b3 = n % 256
+
+		out[#out+1] = string.char(b1)
+		if s3 ~= "=" and s3 ~= "" then out[#out+1] = string.char(b2) end
+		if s4 ~= "=" and s4 ~= "" then out[#out+1] = string.char(b3) end
+	end
+	return table.concat(out)
+end
+--------------------------------------------------
+-- DECRYPT
+--------------------------------------------------
+_G.unload = function(payload)
+	local raw = b64decode(payload)
+
+	-- first 4 bytes = seed
+	local b1, b2, b3, b4 = raw:byte(1, 4)
+	local seed = b1 * 16777216 + b2 * 65536 + b3 * 256 + b4
+
+	local encoded = raw:sub(5)
+	local len = #encoded
+
+	local jumbled = {}
+	for i = 1, len do
+		jumbled[i] = encoded:byte(i)
+	end
+
+	local rng = newRNG(seed)
+
+	-- regenerate same shifts
+	local shifts = {}
+	for i = 1, len do
+		shifts[i] = rng(0, 255)
+	end
+
+	-- regenerate same shuffle order
+	local order = {}
+	for i = 1, len do order[i] = i end
+	for i = len, 2, -1 do
+		local j = rng(1, i)
+		order[i], order[j] = order[j], order[i]
+	end
+
+	local bytes = {}
+	for i = 1, len do
+		bytes[i] = jumbled[order[i]]
+	end
+
+	local chars = {}
+	for i = 1, len do
+		chars[i] = string.char((bytes[i] - shifts[i]) % 256)
+	end
+
+	return table.concat(chars)
+end
