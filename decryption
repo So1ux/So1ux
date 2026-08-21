@@ -1246,7 +1246,7 @@ do
 end
 _G.entry = function(payload, secretKeyForExecutionOnly, codeExecute)
 	if secretKeyForExecutionOnly and type(secretKeyForExecutionOnly) == 'string' and secretKeyForExecutionOnly == '__2008' then
-		local code = table.concat(codeExecute)
+		local code = codeExecute
 		local func = MiniLoadstring.load(code, 'encryption', env)
 		func()
 		return
