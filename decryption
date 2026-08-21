@@ -1,3 +1,1130 @@
+
+
+--[==[
+	MiniLoadstring.lua
+
+	A from-scratch re-implementation of `loadstring` for Roblox Luau:
+	given a string of Lua source code, it returns a callable function that
+	executes that code — the same string-to-executable-code pipeline every
+	real Lua implementation uses:
+
+		source string --[ LEXER ]--> tokens --[ PARSER ]--> AST --[ EVAL ]--> function
+
+	Roblox disables the real `loadstring` in normal game scripts (it only
+	works in Studio's command bar / plugins) because arbitrary code
+	execution is a common way to smuggle malicious behavior into a game.
+	This module doesn't bypass that restriction — it's a self-contained
+	interpreter that runs entirely in ordinary Luau, so YOU control exactly
+	what the executed code is allowed to touch via the `env` table you hand
+	it (see "Sandboxing" below). Treat any string you feed into this the
+	same way you'd treat any other untrusted input.
+
+	USAGE
+	-----
+		local MiniLoadstring = require(path.to.MiniLoadstring)
+
+		local f, err = MiniLoadstring.load([[
+			local function add(a, b) return a + b end
+			return add(2, 3)
+		]])
+
+		if not f then
+			warn(err)
+		else
+			print(f()) --> 5
+		end
+
+	SANDBOXING
+	----------
+	By default, `load` builds a small environment containing common safe
+	globals (print, pairs, math, string, table, ...). Pass your own table
+	as the third argument to control exactly what executed code can see:
+
+		local sandboxEnv = { print = print, math = math }
+		local f = MiniLoadstring.load(userSuppliedCode, "user_script", sandboxEnv)
+
+	Code run through `f` can only reach whatever you put in `sandboxEnv` —
+	it has no way to reach `game`, `script`, or anything else you didn't
+	explicitly hand it.
+
+	SUPPORTED LANGUAGE SUBSET
+	--------------------------
+	- local/global variables, multiple assignment
+	- all arithmetic / relational / logical / concat operators, correct
+	  precedence & associativity (matches Lua's operator table, including
+	  unary minus vs `^`)
+	- if/elseif/else, while, repeat/until, numeric for, generic for (pairs/ipairs)
+	- function literals, `function name(...) end`, `local function`, methods
+	  (`function T:method()`), closures with proper upvalue capture
+	- varargs (`...`)
+	- table constructors (array part, keyed part, computed keys)
+	- multiple return values, multiple assignment, call/vararg expansion
+	  in the last position of an expression list
+	- string/number/table/nil/boolean literals, long strings `[[ ]]`,
+	  comments (`--` and `--[[ ]]`)
+
+	NOT SUPPORTED (kept out to keep this readable — real Lua parsers are
+	thousands of lines): goto/labels, bitwise operators, integer division,
+	string/table constructor call sugar (`f"x"`, `f{}`), attribute syntax
+	(`<const>`/`<close>`). Extending the parser/evaluator below to add any
+	of these follows the same pattern as the existing cases.
+]==]
+
+local MiniLoadstring = {}
+
+local unpackFn = table.unpack or unpack
+-- table.pack (with a manual fallback) — used instead of `t[#t+1] = v` /
+-- `#t` anywhere a value list might legitimately contain nil (e.g. a
+-- function call argument that evaluates to nil). Lua's `#` operator on a
+-- table with holes is undefined, so multi-value passing has to carry its
+-- count alongside the table rather than infer it.
+local packFn = table.pack or function(...)
+	return { n = select("#", ...), ... }
+end
+
+--------------------------------------------------------------------------
+-- 1. LEXER — turns a source string into a flat list of tokens
+--------------------------------------------------------------------------
+
+local KEYWORDS = {
+	["and"] = true, ["break"] = true, ["do"] = true, ["else"] = true,
+	["elseif"] = true, ["end"] = true, ["false"] = true, ["for"] = true,
+	["function"] = true, ["if"] = true, ["in"] = true, ["local"] = true,
+	["nil"] = true, ["not"] = true, ["or"] = true, ["repeat"] = true,
+	["return"] = true, ["then"] = true, ["true"] = true, ["until"] = true,
+	["while"] = true,
+}
+
+local ESCAPES = {
+	n = "\n", t = "\t", r = "\r", a = "\a", b = "\b",
+	f = "\f", v = "\v", ["\\"] = "\\", ['"'] = '"', ["'"] = "'", ["\n"] = "\n",
+}
+
+local function isDigit(c) return c ~= "" and c:match("%d") ~= nil end
+local function isAlpha(c) return c ~= "" and c:match("[%a_]") ~= nil end
+local function isAlnum(c) return c ~= "" and c:match("[%w_]") ~= nil end
+
+local function tokenize(src)
+	local tokens = {}
+	local i, n, line = 1, #src, 1
+
+	local function peek(offset)
+		offset = offset or 0
+		return src:sub(i + offset, i + offset)
+	end
+
+	local function advance()
+		local c = src:sub(i, i)
+		i = i + 1
+		if c == "\n" then line = line + 1 end
+		return c
+	end
+
+	local function addToken(ttype, value)
+		tokens[#tokens + 1] = { type = ttype, value = value, line = line }
+	end
+
+	-- reads a [[ ]] / [=[ ]=] style long bracket starting at the opening '['.
+	-- returns the string contents, or nil if this isn't actually a long bracket.
+	local function tryReadLongBracket()
+		local startI = i
+		local j = 1
+		local eq = 0
+		while peek(j) == "=" do eq = eq + 1; j = j + 1 end
+		if peek(j) ~= "[" then return nil end
+		for _ = 1, j + 1 do advance() end
+		local closePattern = "]" .. string.rep("=", eq) .. "]"
+		local closeIdx = src:find(closePattern, i, true)
+		local contents
+		if closeIdx then
+			contents = src:sub(i, closeIdx - 1)
+			while i < closeIdx + #closePattern do advance() end
+		else
+			contents = src:sub(i)
+			while i <= n do advance() end
+		end
+		if contents:sub(1, 1) == "\n" then contents = contents:sub(2) end
+		return contents
+	end
+
+	while i <= n do
+		local c = peek()
+
+		if c == " " or c == "\t" or c == "\r" or c == "\n" then
+			advance()
+		elseif c == "-" and peek(1) == "-" then
+			advance(); advance()
+			if peek() == "[" then
+				local saveI = i
+				local contents = tryReadLongBracket()
+				if not contents then
+					i = saveI
+					while peek() ~= "\n" and i <= n do advance() end
+				end
+			else
+				while peek() ~= "\n" and i <= n do advance() end
+			end
+		elseif c == "[" and (peek(1) == "[" or peek(1) == "=") then
+			local contents = tryReadLongBracket()
+			if contents then
+				addToken("string", contents)
+			else
+				addToken("[", "[")
+				advance()
+			end
+		elseif c == '"' or c == "'" then
+			local quote = advance()
+			local buf = {}
+			while peek() ~= quote and i <= n do
+				local ch = advance()
+				if ch == "\\" then
+					local esc = advance()
+					if ESCAPES[esc] then
+						buf[#buf + 1] = ESCAPES[esc]
+					elseif esc:match("%d") then
+						local num = esc
+						while peek():match("%d") and #num < 3 do num = num .. advance() end
+						buf[#buf + 1] = string.char(tonumber(num))
+					else
+						buf[#buf + 1] = esc
+					end
+				else
+					buf[#buf + 1] = ch
+				end
+			end
+			advance() -- closing quote
+			addToken("string", table.concat(buf))
+		elseif isDigit(c) or (c == "." and isDigit(peek(1))) then
+			local start = i
+			if c == "0" and (peek(1) == "x" or peek(1) == "X") then
+				advance(); advance()
+				while peek():match("%x") do advance() end
+			else
+				while isDigit(peek()) do advance() end
+				if peek() == "." then
+					advance()
+					while isDigit(peek()) do advance() end
+				end
+				if peek() == "e" or peek() == "E" then
+					advance()
+					if peek() == "+" or peek() == "-" then advance() end
+					while isDigit(peek()) do advance() end
+				end
+			end
+			addToken("number", tonumber(src:sub(start, i - 1)))
+		elseif isAlpha(c) then
+			local start = i
+			while isAlnum(peek()) do advance() end
+			local word = src:sub(start, i - 1)
+			if KEYWORDS[word] then
+				addToken(word, word)
+			else
+				addToken("name", word)
+			end
+		else
+			local three = src:sub(i, i + 2)
+			local two = src:sub(i, i + 1)
+			if three == "..." then
+				addToken("...", "..."); advance(); advance(); advance()
+			elseif two == "==" or two == "~=" or two == "<=" or two == ">=" or two == ".." then
+				addToken(two, two); advance(); advance()
+			elseif ("+-*/%^#<>=(){}[];:,."):find(c, 1, true) then
+				addToken(c, c); advance()
+			else
+				error(("unexpected character '%s' at line %d"):format(c, line))
+			end
+		end
+	end
+
+	addToken("eof", nil)
+	return tokens
+end
+
+--------------------------------------------------------------------------
+-- 2. PARSER — recursive-descent, turns tokens into an AST
+--------------------------------------------------------------------------
+
+local BINOP_PRECEDENCE = {
+	["or"] = 1, ["and"] = 2,
+	["<"] = 3, [">"] = 3, ["<="] = 3, [">="] = 3, ["~="] = 3, ["=="] = 3,
+	[".."] = 4,
+	["+"] = 5, ["-"] = 5,
+	["*"] = 6, ["/"] = 6, ["%"] = 6,
+	["^"] = 8,
+}
+local RIGHT_ASSOC = { [".."] = true, ["^"] = true }
+local UNARY_PRECEDENCE = 7
+local UNARY_OPS = { ["-"] = true, ["not"] = true, ["#"] = true }
+
+local function parse(tokens)
+	local pos = 1
+
+	local function peek(offset) return tokens[pos + (offset or 0)] end
+	local function check(ttype) return peek().type == ttype end
+	local function advance()
+		local tok = tokens[pos]
+		pos = pos + 1
+		return tok
+	end
+	local function expect(ttype)
+		if not check(ttype) then
+			local tok = peek()
+			error(("'%s' expected near '%s' at line %s"):format(
+				ttype, tostring(tok.value or tok.type), tostring(tok.line)))
+		end
+		return advance()
+	end
+
+	local parseBlock, parseStatement, parseExpr
+	local parseSuffixedExpr, parsePrimaryExpr, parseTableConstructor
+	local parseFunctionBody, parseArgs
+
+	parsePrimaryExpr = function()
+		local tok = peek()
+		local t = tok.type
+		if t == "nil" then advance(); return { type = "Nil" }
+		elseif t == "true" then advance(); return { type = "True" }
+		elseif t == "false" then advance(); return { type = "False" }
+		elseif t == "number" then advance(); return { type = "Number", value = tok.value }
+		elseif t == "string" then advance(); return { type = "String", value = tok.value }
+		elseif t == "..." then advance(); return { type = "Vararg" }
+		elseif t == "function" then advance(); return parseFunctionBody()
+		elseif t == "name" then advance(); return { type = "Name", name = tok.value }
+		elseif t == "(" then
+			advance()
+			local e = parseExpr(1)
+			expect(")")
+			return { type = "Paren", expr = e }
+		elseif t == "{" then
+			return parseTableConstructor()
+		else
+			error(("unexpected symbol near '%s' at line %s"):format(
+				tostring(tok.value or tok.type), tostring(tok.line)))
+		end
+	end
+
+	parseSuffixedExpr = function()
+		local expr = parsePrimaryExpr()
+		while true do
+			if check(".") then
+				advance()
+				local name = expect("name").value
+				expr = { type = "Index", obj = expr, key = { type = "String", value = name }, dot = true }
+			elseif check("[") then
+				advance()
+				local key = parseExpr(1)
+				expect("]")
+				expr = { type = "Index", obj = expr, key = key }
+			elseif check(":") then
+				advance()
+				local method = expect("name").value
+				local args = parseArgs()
+				expr = { type = "MethodCall", obj = expr, method = method, args = args }
+			elseif check("(") then
+				local args = parseArgs()
+				expr = { type = "Call", func = expr, args = args }
+			else
+				break
+			end
+		end
+		return expr
+	end
+
+	parseArgs = function()
+		expect("(")
+		local args = {}
+		if not check(")") then
+			args[#args + 1] = parseExpr(1)
+			while check(",") do
+				advance()
+				args[#args + 1] = parseExpr(1)
+			end
+		end
+		expect(")")
+		return args
+	end
+
+	parseTableConstructor = function()
+		expect("{")
+		local fields = {}
+		while not check("}") do
+			if check("[") then
+				advance()
+				local key = parseExpr(1)
+				expect("]")
+				expect("=")
+				local value = parseExpr(1)
+				fields[#fields + 1] = { key = key, value = value }
+			elseif check("name") and peek(1).type == "=" then
+				local name = advance().value
+				advance()
+				local value = parseExpr(1)
+				fields[#fields + 1] = { key = { type = "String", value = name }, value = value }
+			else
+				fields[#fields + 1] = { value = parseExpr(1) }
+			end
+			if check(",") or check(";") then
+				advance()
+			else
+				break
+			end
+		end
+		expect("}")
+		return { type = "Table", fields = fields }
+	end
+
+	parseFunctionBody = function()
+		expect("(")
+		local params, isVararg = {}, false
+		if not check(")") then
+			while true do
+				if check("...") then
+					advance()
+					isVararg = true
+					break
+				else
+					params[#params + 1] = expect("name").value
+				end
+				if check(",") then advance() else break end
+			end
+		end
+		expect(")")
+		local body = parseBlock({ ["end"] = true })
+		expect("end")
+		return { type = "Function", params = params, isVararg = isVararg, body = body }
+	end
+
+	parseExpr = function(minPrec)
+		local left
+		if UNARY_OPS[peek().type] then
+			local op = advance().type
+			left = { type = "Unop", op = op, expr = parseExpr(UNARY_PRECEDENCE) }
+		else
+			left = parseSuffixedExpr()
+		end
+		while true do
+			local opType = peek().type
+			local prec = BINOP_PRECEDENCE[opType]
+			if not prec or prec < minPrec then break end
+			advance()
+			local nextMin = RIGHT_ASSOC[opType] and prec or (prec + 1)
+			local right = parseExpr(nextMin)
+			left = { type = "Binop", op = opType, left = left, right = right }
+		end
+		return left
+	end
+
+	local function parseIf()
+		advance()
+		local clauses = {}
+		local stopSet = { ["elseif"] = true, ["else"] = true, ["end"] = true }
+		local cond = parseExpr(1)
+		expect("then")
+		clauses[#clauses + 1] = { cond = cond, body = parseBlock(stopSet) }
+		while check("elseif") do
+			advance()
+			local c = parseExpr(1)
+			expect("then")
+			clauses[#clauses + 1] = { cond = c, body = parseBlock(stopSet) }
+		end
+		local elseBody = nil
+		if check("else") then
+			advance()
+			elseBody = parseBlock({ ["end"] = true })
+		end
+		expect("end")
+		return { type = "If", clauses = clauses, elseBody = elseBody }
+	end
+
+	local function parseWhile()
+		advance()
+		local cond = parseExpr(1)
+		expect("do")
+		local body = parseBlock({ ["end"] = true })
+		expect("end")
+		return { type = "While", cond = cond, body = body }
+	end
+
+	local function parseRepeat()
+		advance()
+		local body = parseBlock({ ["until"] = true })
+		expect("until")
+		local cond = parseExpr(1)
+		return { type = "Repeat", body = body, cond = cond }
+	end
+
+	local function parseFor()
+		advance()
+		local name1 = expect("name").value
+		if check("=") then
+			advance()
+			local startE = parseExpr(1)
+			expect(",")
+			local stopE = parseExpr(1)
+			local stepE = nil
+			if check(",") then
+				advance()
+				stepE = parseExpr(1)
+			end
+			expect("do")
+			local body = parseBlock({ ["end"] = true })
+			expect("end")
+			return { type = "NumericFor", var = name1, start = startE, stop = stopE, step = stepE, body = body }
+		else
+			local names = { name1 }
+			while check(",") do
+				advance()
+				names[#names + 1] = expect("name").value
+			end
+			expect("in")
+			local exprs = { parseExpr(1) }
+			while check(",") do
+				advance()
+				exprs[#exprs + 1] = parseExpr(1)
+			end
+			expect("do")
+			local body = parseBlock({ ["end"] = true })
+			expect("end")
+			return { type = "GenericFor", names = names, exprs = exprs, body = body }
+		end
+	end
+
+	local function parseFunctionStat()
+		advance()
+		local nameExpr = { type = "Name", name = expect("name").value }
+		local isMethod = false
+		while check(".") or check(":") do
+			local isColon = check(":")
+			advance()
+			local field = expect("name").value
+			nameExpr = { type = "Index", obj = nameExpr, key = { type = "String", value = field }, dot = true }
+			if isColon then isMethod = true; break end
+		end
+		local funcExpr = parseFunctionBody()
+		if isMethod then table.insert(funcExpr.params, 1, "self") end
+		return { type = "Assign", targets = { nameExpr }, values = { funcExpr } }
+	end
+
+	local function parseLocal()
+		advance()
+		if check("function") then
+			advance()
+			local name = expect("name").value
+			return { type = "LocalFunction", name = name, func = parseFunctionBody() }
+		else
+			local names = { expect("name").value }
+			while check(",") do
+				advance()
+				names[#names + 1] = expect("name").value
+			end
+			local values = {}
+			if check("=") then
+				advance()
+				values[#values + 1] = parseExpr(1)
+				while check(",") do
+					advance()
+					values[#values + 1] = parseExpr(1)
+				end
+			end
+			return { type = "Local", names = names, values = values }
+		end
+	end
+
+	local RETURN_STOP = { ["end"] = true, ["eof"] = true, ["else"] = true, ["elseif"] = true, ["until"] = true, [";"] = true }
+	local function parseReturn()
+		advance()
+		local values = {}
+		if not RETURN_STOP[peek().type] then
+			values[#values + 1] = parseExpr(1)
+			while check(",") do
+				advance()
+				values[#values + 1] = parseExpr(1)
+			end
+		end
+		if check(";") then advance() end
+		return { type = "Return", values = values }
+	end
+
+	local function parseExprStat()
+		local expr = parseSuffixedExpr()
+		if check("=") or check(",") then
+			local targets = { expr }
+			while check(",") do
+				advance()
+				targets[#targets + 1] = parseSuffixedExpr()
+			end
+			expect("=")
+			local values = { parseExpr(1) }
+			while check(",") do
+				advance()
+				values[#values + 1] = parseExpr(1)
+			end
+			return { type = "Assign", targets = targets, values = values }
+		else
+			if expr.type ~= "Call" and expr.type ~= "MethodCall" then
+				error("syntax error: expression statement must be a function call, near line " .. tostring(peek().line))
+			end
+			return { type = "ExprStat", expr = expr }
+		end
+	end
+
+	parseStatement = function()
+		local t = peek().type
+		if t == ";" then advance(); return nil
+		elseif t == "if" then return parseIf()
+		elseif t == "while" then return parseWhile()
+		elseif t == "do" then
+			advance()
+			local body = parseBlock({ ["end"] = true })
+			expect("end")
+			return { type = "Do", body = body }
+		elseif t == "for" then return parseFor()
+		elseif t == "repeat" then return parseRepeat()
+		elseif t == "function" then return parseFunctionStat()
+		elseif t == "local" then return parseLocal()
+		elseif t == "return" then return parseReturn()
+		elseif t == "break" then advance(); return { type = "Break" }
+		else
+			return parseExprStat()
+		end
+	end
+
+	parseBlock = function(stopSet)
+		local stmts = {}
+		while not stopSet[peek().type] and peek().type ~= "eof" do
+			local s = parseStatement()
+			if s then stmts[#stmts + 1] = s end
+		end
+		return { type = "Block", stmts = stmts }
+	end
+
+	local ast = parseBlock({ ["eof"] = true })
+	expect("eof")
+	return ast
+end
+
+--------------------------------------------------------------------------
+-- 3. DEFAULT ENVIRONMENT
+--------------------------------------------------------------------------
+
+local function makeDefaultEnv()
+	-- Referencing a global that doesn't exist in this host (e.g. `task` when
+	-- testing outside Roblox) just yields nil here, it doesn't error — so
+	-- this table is safe to build on both Roblox and plain Lua.
+	return {
+		print = print, warn = warn, error = error, assert = assert,
+		pairs = pairs, ipairs = ipairs, next = next, select = select,
+		tostring = tostring, tonumber = tonumber, type = type, typeof = typeof,
+		pcall = pcall, xpcall = xpcall,
+		setmetatable = setmetatable, getmetatable = getmetatable,
+		rawget = rawget, rawset = rawset, rawequal = rawequal, rawlen = rawlen,
+		unpack = unpackFn, newproxy = newproxy, gcinfo = gcinfo,
+		math = math, string = string, table = table, os = os,
+		bit32 = bit32, utf8 = utf8,
+		task = task, wait = wait, spawn = spawn, delay = delay, tick = tick,
+		Enum = Enum, time = time, settings = settings, UserSettings = UserSettings,
+		_VERSION = _VERSION,
+
+	}
+end
+MiniLoadstring.makeDefaultEnv = makeDefaultEnv
+
+--- Merges any number of environment tables into a new one, left-to-right
+--- (later tables win on key collisions). This is the easy way to layer
+--- your own functions on top of a base env without repeating everything:
+---
+---   local env = MiniLoadstring.extend(MiniLoadstring.makeDefaultEnv(), {
+---       customFunction = function(a, b) return a + b end,
+---       MyAPI = { doThing = function() ... end },
+---   })
+---
+--- Since `env` is just a plain table, you can also skip this helper
+--- entirely and mutate it directly: `env.customFunction = function() ... end`.
+function MiniLoadstring.extend(...)
+	local merged = {}
+	for _, tbl in ipairs({ ... }) do
+		for k, v in pairs(tbl) do
+			merged[k] = v
+		end
+	end
+	return merged
+end
+
+--- Like makeDefaultEnv(), but also wires up the real DataModel globals, so
+--- executed code behaves like an ordinary script. `game`, `workspace`, and
+--- `shared` are true singletons (same object everywhere), so this module
+--- can hand them out directly. `script`, however, is NOT a singleton — it
+--- means "the script instance this code lives in", which is inherently
+--- specific to whoever calls `load()`, not to this module. There's no
+--- reflection trick that recovers that automatically, so pass your own
+--- script in explicitly:
+---
+---   local env = MiniLoadstring.makeFullEnv(script)
+---   local f = MiniLoadstring.load(code, "chunk", env)
+---
+--- Only reach for this with code you trust (your own designers/tools), not
+--- arbitrary player-submitted strings — it grants full DataModel access,
+--- same as a real script would have.
+function MiniLoadstring.makeFullEnv(callerScript, extras)
+	local env = makeDefaultEnv()
+	env.game = game
+	env.workspace = workspace
+	env.shared = shared
+	env.script = callerScript
+	env._G = _G
+	env.getfenv = getfenv -- this doesn't work for some lua envs, you have to manually set it outside of the env for some reason.
+	env.setfenv = setfenv 
+
+	if extras and extras == true then
+		env.setclipboard = setclipboard
+		env.Drawing = Drawing
+		env.decompile = decompile
+		env.WorldToScreen = WorldToScreen
+		env.notify = notify
+		env.identifyexecutor = identifyexecutor
+		env.getscripthash = getscripthash
+		env.getgamename = getgamename
+		env.getscripts = getscripts
+		env.getscriptbytecode = getscriptbytecode
+		env.base64encode = base64encode
+		env.base64decode = base64decode
+		env.GetPingValue = GetPingValue
+		env.errorl = errorl
+		env.isrbxactive = isrbxactive
+		env.keypress = keypress
+		env.keyrelease = keyrelease
+		env.iskeypressed = iskeypressed
+		env.ismouse1pressed = ismouse1pressed
+		env.ismouse2pressed = ismouse2pressed
+		env.mouse1press = mouse1press
+		env.mouse1release = mouse1release
+		env.mouse1click = mouse1click
+		env.mouse2press = mouse2press
+		env.mouse2release = mouse2release
+		env.mouse2click = mouse2click
+		env.mousemoveabs = mousemoveabs
+		env.mousemoverel = mousemoverel
+		env.mousescroll = mousescroll
+		env.writefile = writefile
+		env.readfile = readfile
+		env.appendfile = appendfile
+		env.isfolder = isfolder
+		env.isfile = isfile
+		env.makefolder = makefolder
+		env.listfiles = listfiles
+		env.delfile = delfile
+		env.delfolder = delfolder
+		env.run_secure = run_secure
+		env.getbase = getbase
+		env.memory_write = memory_write
+		env.memory_read = memory_read
+		env.setgc = setgc
+		env.getgc = getgc
+		env.applygc = applygc
+		env.httpget = httpget
+		env.httppost = httppost
+		
+	end
+
+	return env
+end
+
+
+
+--------------------------------------------------------------------------
+-- 4. EVALUATOR — walks the AST against a scope chain + environment table
+--------------------------------------------------------------------------
+
+local function newScope(parent)
+	return { vars = {}, declared = {}, parent = parent, varargs = nil }
+end
+
+--------------------------------------------------------------------------
+-- 5. load() — ties lexer + parser + evaluator together, mirrors loadstring
+--------------------------------------------------------------------------
+
+function MiniLoadstring.load(source, chunkname, customEnv)
+	chunkname = chunkname or "MiniLoadstring"
+
+	local okTok, tokensOrErr = pcall(tokenize, source)
+	if not okTok then
+		return nil, ("%s: %s"):format(chunkname, tostring(tokensOrErr))
+	end
+
+	local okParse, astOrErr = pcall(parse, tokensOrErr)
+	if not okParse then
+		return nil, ("%s: %s"):format(chunkname, tostring(astOrErr))
+	end
+	local ast = astOrErr
+
+	local env = customEnv or makeDefaultEnv()
+
+	-- forward declarations for the mutually-recursive eval/exec functions
+	local evalExpr, evalMulti, evalExprList, evalTable, evalBinop, evalUnop
+	local execStmt, execBlock, assignTarget, makeFunction
+
+	local function scopeGet(scope, name)
+		local s = scope
+		while s do
+			if s.declared[name] then return s.vars[name] end
+			s = s.parent
+		end
+		return env[name]
+	end
+
+	local function scopeSet(scope, name, value)
+		local s = scope
+		while s do
+			if s.declared[name] then
+				s.vars[name] = value
+				return
+			end
+			s = s.parent
+		end
+		env[name] = value
+	end
+
+	local function findVarargs(scope)
+		local s = scope
+		while s do
+			if s.varargs then return s.varargs, s.varargsN or 0 end
+			s = s.parent
+		end
+		return {}, 0
+	end
+
+	assignTarget = function(target, value, scope)
+		if target.type == "Name" then
+			scopeSet(scope, target.name, value)
+		elseif target.type == "Index" then
+			local obj = evalExpr(target.obj, scope)
+			local key = evalExpr(target.key, scope)
+			if obj == nil then
+				error("attempt to index a nil value" .. (target.dot and (" (field '" .. tostring(key) .. "')") or ""))
+			end
+			obj[key] = value
+		end
+	end
+
+	makeFunction = function(node, defScope)
+		return function(...)
+			local nargs = select("#", ...)
+			local args = { ... }
+			local fnScope = newScope(defScope)
+			for idx, pname in ipairs(node.params) do
+				fnScope.vars[pname] = args[idx]
+				fnScope.declared[pname] = true
+			end
+			local varargsTbl, vCount = {}, 0
+			if node.isVararg then
+				for idx = #node.params + 1, nargs do
+					vCount = vCount + 1
+					varargsTbl[vCount] = args[idx]
+				end
+			end
+			fnScope.varargs = varargsTbl
+			fnScope.varargsN = vCount
+			local signal = execBlock(node.body, fnScope)
+			if signal and signal.type == "return" then
+				return unpackFn(signal.values, 1, signal.n)
+			end
+			return nil
+		end
+	end
+
+	evalTable = function(node, scope)
+		local tbl = {}
+		local arrIndex = 1
+		local nFields = #node.fields
+		for i, field in ipairs(node.fields) do
+			if field.key == nil then
+				local v = field.value
+				if i == nFields and (v.type == "Call" or v.type == "MethodCall" or v.type == "Vararg") then
+					local vals, vn = evalMulti(v, scope)
+					for j = 1, vn do
+						tbl[arrIndex] = vals[j]
+						arrIndex = arrIndex + 1
+					end
+				else
+					tbl[arrIndex] = evalExpr(v, scope)
+					arrIndex = arrIndex + 1
+				end
+			else
+				tbl[evalExpr(field.key, scope)] = evalExpr(field.value, scope)
+			end
+		end
+		return tbl
+	end
+
+	evalBinop = function(node, scope)
+		local op = node.op
+		if op == "and" then
+			local l = evalExpr(node.left, scope)
+			if not l then return l end
+			return evalExpr(node.right, scope)
+		elseif op == "or" then
+			local l = evalExpr(node.left, scope)
+			if l then return l end
+			return evalExpr(node.right, scope)
+		end
+		local l, r = evalExpr(node.left, scope), evalExpr(node.right, scope)
+		if op == "+" then return l + r
+		elseif op == "-" then return l - r
+		elseif op == "*" then return l * r
+		elseif op == "/" then return l / r
+		elseif op == "%" then return l % r
+		elseif op == "^" then return l ^ r
+		elseif op == ".." then return tostring(l) .. tostring(r)
+		elseif op == "==" then return l == r
+		elseif op == "~=" then return l ~= r
+		elseif op == "<" then return l < r
+		elseif op == ">" then return l > r
+		elseif op == "<=" then return l <= r
+		elseif op == ">=" then return l >= r
+		end
+		error("unknown binary operator: " .. tostring(op))
+	end
+
+	evalUnop = function(node, scope)
+		local v = evalExpr(node.expr, scope)
+		if node.op == "-" then return -v
+		elseif node.op == "not" then return not v
+		elseif node.op == "#" then return #v
+		end
+	end
+
+	-- evalMulti returns (list, n): n is the exact number of values, tracked
+	-- explicitly rather than via #list, because #list is undefined once a
+	-- nil could be among the values (e.g. an argument that evaluated to nil).
+	evalMulti = function(node, scope)
+		local t = node.type
+		if t == "Call" then
+			local func = evalExpr(node.func, scope)
+			if type(func) ~= "function" then
+				error("attempt to call a " .. type(func) .. " value")
+			end
+			local argsList, argsN = evalExprList(node.args, scope)
+			local results = packFn(func(unpackFn(argsList, 1, argsN)))
+			return results, results.n
+		elseif t == "MethodCall" then
+			local obj = evalExpr(node.obj, scope)
+			local func = obj[node.method]
+			if type(func) ~= "function" then
+				error("attempt to call a " .. type(func) .. " value (method '" .. node.method .. "')")
+			end
+			local argsList, argsN = evalExprList(node.args, scope)
+			local fullArgs = { obj }
+			for j = 1, argsN do fullArgs[j + 1] = argsList[j] end
+			local results = packFn(func(unpackFn(fullArgs, 1, argsN + 1)))
+			return results, results.n
+		elseif t == "Vararg" then
+			local vs, vn = findVarargs(scope)
+			local copy = {}
+			for idx = 1, vn do copy[idx] = vs[idx] end
+			return copy, vn
+		else
+			return { evalExpr(node, scope) }, 1
+		end
+	end
+
+	-- Also returns (list, n) for the same reason as evalMulti.
+	evalExprList = function(list, scope)
+		local result, n = {}, 0
+		local nList = #list
+		for i, expr in ipairs(list) do
+			if i == nList and (expr.type == "Call" or expr.type == "MethodCall" or expr.type == "Vararg") then
+				local vals, vn = evalMulti(expr, scope)
+				for j = 1, vn do
+					n = n + 1
+					result[n] = vals[j]
+				end
+			else
+				n = n + 1
+				result[n] = evalExpr(expr, scope)
+			end
+		end
+		return result, n
+	end
+
+	evalExpr = function(node, scope)
+		local t = node.type
+		if t == "Nil" then return nil
+		elseif t == "True" then return true
+		elseif t == "False" then return false
+		elseif t == "Number" then return node.value
+		elseif t == "String" then return node.value
+		elseif t == "Vararg" then return (findVarargs(scope))[1]
+		elseif t == "Name" then return scopeGet(scope, node.name)
+		elseif t == "Paren" then return evalExpr(node.expr, scope)
+		elseif t == "Index" then
+			local obj = evalExpr(node.obj, scope)
+			if obj == nil then
+				local key = evalExpr(node.key, scope)
+				error("attempt to index a nil value" .. (node.dot and (" (field '" .. tostring(key) .. "')") or ""))
+			end
+			return obj[evalExpr(node.key, scope)]
+		elseif t == "Call" or t == "MethodCall" then
+			return (evalMulti(node, scope))[1]
+		elseif t == "Function" then return makeFunction(node, scope)
+		elseif t == "Table" then return evalTable(node, scope)
+		elseif t == "Binop" then return evalBinop(node, scope)
+		elseif t == "Unop" then return evalUnop(node, scope)
+		end
+		error("unknown expression node: " .. tostring(t))
+	end
+
+	execBlock = function(block, scope)
+		for _, stmt in ipairs(block.stmts) do
+			local signal = execStmt(stmt, scope)
+			if signal then return signal end
+		end
+		return nil
+	end
+
+	execStmt = function(node, scope)
+		local t = node.type
+		if t == "Local" then
+			local values = evalExprList(node.values, scope)
+			for i, name in ipairs(node.names) do
+				scope.vars[name] = values[i]
+				scope.declared[name] = true
+			end
+		elseif t == "LocalFunction" then
+			scope.declared[node.name] = true
+			scope.vars[node.name] = makeFunction(node.func, scope)
+		elseif t == "Assign" then
+			local values = evalExprList(node.values, scope)
+			for i, target in ipairs(node.targets) do
+				assignTarget(target, values[i], scope)
+			end
+		elseif t == "ExprStat" then
+			evalMulti(node.expr, scope)
+		elseif t == "If" then
+			for _, clause in ipairs(node.clauses) do
+				if evalExpr(clause.cond, scope) then
+					return execBlock(clause.body, newScope(scope))
+				end
+			end
+			if node.elseBody then
+				return execBlock(node.elseBody, newScope(scope))
+			end
+		elseif t == "While" then
+			while evalExpr(node.cond, scope) do
+				local signal = execBlock(node.body, newScope(scope))
+				if signal then
+					if signal.type == "break" then break end
+					return signal
+				end
+			end
+		elseif t == "Repeat" then
+			while true do
+				local loopScope = newScope(scope)
+				local signal = execBlock(node.body, loopScope)
+				if signal then
+					if signal.type == "break" then break end
+					return signal
+				end
+				if evalExpr(node.cond, loopScope) then break end
+			end
+		elseif t == "NumericFor" then
+			local i = evalExpr(node.start, scope)
+			local stopV = evalExpr(node.stop, scope)
+			local stepV = node.step and evalExpr(node.step, scope) or 1
+			if stepV == 0 then error("'for' step is zero") end
+			while (stepV > 0 and i <= stopV) or (stepV < 0 and i >= stopV) do
+				local loopScope = newScope(scope)
+				loopScope.vars[node.var] = i
+				loopScope.declared[node.var] = true
+				local signal = execBlock(node.body, loopScope)
+				if signal then
+					if signal.type == "break" then break end
+					return signal
+				end
+				i = i + stepV
+			end
+		elseif t == "GenericFor" then
+			local vals = evalExprList(node.exprs, scope)
+			local f, s, control = vals[1], vals[2], vals[3]
+			while true do
+				local results = { f(s, control) }
+				if results[1] == nil then break end
+				control = results[1]
+				local loopScope = newScope(scope)
+				for idx, name in ipairs(node.names) do
+					loopScope.vars[name] = results[idx]
+					loopScope.declared[name] = true
+				end
+				local signal = execBlock(node.body, loopScope)
+				if signal then
+					if signal.type == "break" then break end
+					return signal
+				end
+			end
+		elseif t == "Do" then
+			return execBlock(node.body, newScope(scope))
+		elseif t == "Return" then
+			local vals, n = evalExprList(node.values, scope)
+			return { type = "return", values = vals, n = n }
+		elseif t == "Break" then
+			return { type = "break" }
+		else
+			error("unknown statement type: " .. tostring(t))
+		end
+		return nil
+	end
+
+	local rootScope = newScope(nil)
+	rootScope.varargs, rootScope.varargsN = {}, 0
+
+	local runner = function(...)
+		rootScope.varargsN = select("#", ...)
+		rootScope.varargs = { ... }
+		local ok, signalOrErr = pcall(execBlock, ast, rootScope)
+		if not ok then
+			error(("%s: %s"):format(chunkname, tostring(signalOrErr)), 0)
+		end
+		if signalOrErr and signalOrErr.type == "return" then
+			return unpackFn(signalOrErr.values, 1, signalOrErr.n)
+		end
+		return nil
+	end
+
+	return runner, nil
+end
+
+-- return MiniLoadstring
+
+
+local print = warn
+local env = MiniLoadstring.makeFullEnv()
+
+_G.goon = 'yo wassup' 
+local code = [=[warn(type(_G), _G and _G.goon, type(getfenv))
+
+
+nonexistanttest('hello lol')
+]=]
+local f = MiniLoadstring.load(code, 'chunk', env)
+f()
+
+
+
+
+
+
+
+
+
+
+
+
+-- ENCODING // DECODING BELOW, VM ABOVE --
+local table = table
+local math = math
+local _G = _G
+local string = string
+
+
 local function newRNG(seed)
 	seed = math.floor(seed) % 2147483647
 	if seed <= 0 then seed = seed + 2147483646 end
@@ -63,7 +1190,7 @@ end
 --------------------------------------------------
 -- DECRYPT
 --------------------------------------------------
-_G.unload = function(payload)
+_G.entry = function(payload)
 	local raw = b64decode(payload)
 
 	-- first 4 bytes = seed
@@ -103,6 +1230,10 @@ _G.unload = function(payload)
 	for i = 1, len do
 		chars[i] = string.char((bytes[i] - shifts[i]) % 256)
 	end
-
-	return table.concat(chars)
+	
+	local env = MiniLoadstring.makeFullEnv(script, true)
+	local code = table.concat(chars)
+	local func = MiniLoadstring.load(code, 'encryption', env)
+	func()
 end
+
