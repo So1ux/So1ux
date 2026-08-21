@@ -1095,20 +1095,6 @@ end
 -- return MiniLoadstring
 
 
-local print = warn
-local env = MiniLoadstring.makeFullEnv()
-
-_G.goon = 'yo wassup' 
-local code = [=[warn(type(_G), _G and _G.goon, type(getfenv))
-
-
-nonexistanttest('hello lol')
-]=]
-local f = MiniLoadstring.load(code, 'chunk', env)
-f()
-
-
-
 
 
 
