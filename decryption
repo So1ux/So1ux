@@ -819,6 +819,8 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 	env.script = callerScript
 	env._G = _G
 	env.Enum = Enum
+	env.getfenv = getfenv
+	env.setfenv = setfenv
 	env.loadstring = function(code)
 		return function()
 			return MiniLoadstring.load(code, "inner", env)()
