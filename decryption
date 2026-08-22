@@ -820,7 +820,9 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 	env._G = _G
 	env.Enum = Enum
 	env.loadstring = function(code)
-		MiniLoadstring.load(code, "inner", env)
+		return function()
+			return MiniLoadstring.load(code, "inner", env)()
+		end
 	end
 	if extras then
 		-- Add your own opt-in extras here, e.g.:
