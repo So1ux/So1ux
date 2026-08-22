@@ -1,4 +1,3 @@
-
 --[==[
 	MiniLoadstring.lua
 
@@ -52,7 +51,9 @@
 	- all arithmetic / relational / logical / concat operators, correct
 	  precedence & associativity (matches Lua's operator table, including
 	  unary minus vs `^`)
-	- if/elseif/else, while, repeat/until, numeric for, generic for (pairs/ipairs)
+	- compound assignment: `+= -= *= /= %= ^= ..=`
+	- if/elseif/else, while, repeat/until, numeric for, generic for
+	  (pairs/ipairs, and Luau's generalized iteration `for k,v in t do`)
 	- function literals, `function name(...) end`, `local function`, methods
 	  (`function T:method()`), closures with proper upvalue capture
 	- varargs (`...`)
@@ -60,6 +61,7 @@
 	- multiple return values, multiple assignment, call/vararg expansion
 	  in the last position of an expression list
 	- string/number/table/nil/boolean literals, long strings `[[ ]]`,
+	  string interpolation `` `text {expr}` ``, call-sugar (`f"x"`, `f{}`),
 	  comments (`--` and `--[[ ]]`)
 
 	NOT SUPPORTED (kept out to keep this readable — real Lua parsers are
@@ -195,6 +197,75 @@ local function tokenize(src)
 			end
 			advance() -- closing quote
 			addToken("string", table.concat(buf))
+		elseif c == "`" then
+			-- Luau string interpolation: `text {expr} more text`. Each
+			-- `{...}` piece is captured as raw source here (brace/quote
+			-- aware) and parsed as a standalone expression later, in the
+			-- parser — the lexer's job is just to find where it ends.
+			advance() -- consume opening backtick
+			local parts = {}
+			local buf = {}
+			local function flushLiteral()
+				parts[#parts + 1] = { kind = "str", value = table.concat(buf) }
+				buf = {}
+			end
+			while true do
+				if i > n then
+					error(("unterminated interpolated string at line %d"):format(line))
+				end
+				local ch = peek()
+				if ch == "`" then
+					advance()
+					break
+				elseif ch == "\\" then
+					advance()
+					local esc = advance()
+					if ESCAPES[esc] then
+						buf[#buf + 1] = ESCAPES[esc]
+					elseif esc == "{" or esc == "`" then
+						buf[#buf + 1] = esc
+					elseif esc:match("%d") then
+						local num = esc
+						while peek():match("%d") and #num < 3 do num = num .. advance() end
+						buf[#buf + 1] = string.char(tonumber(num))
+					else
+						buf[#buf + 1] = esc
+					end
+				elseif ch == "{" then
+					flushLiteral()
+					advance() -- consume '{'
+					local exprStart = i
+					local depth = 1
+					while depth > 0 do
+						if i > n then
+							error(("unterminated interpolated expression at line %d"):format(line))
+						end
+						local ec = peek()
+						if ec == "'" or ec == '"' then
+							local quote = advance()
+							while peek() ~= quote and i <= n do
+								if peek() == "\\" then advance() end
+								advance()
+							end
+							if i <= n then advance() end -- closing quote
+						elseif ec == "{" then
+							depth = depth + 1
+							advance()
+						elseif ec == "}" then
+							depth = depth - 1
+							advance()
+						else
+							advance()
+						end
+					end
+					local exprSource = src:sub(exprStart, i - 2) -- exclude the closing '}'
+					parts[#parts + 1] = { kind = "expr", source = exprSource }
+				else
+					buf[#buf + 1] = advance()
+				end
+			end
+			flushLiteral()
+			addToken("interpstring", parts)
 		elseif isDigit(c) or (c == "." and isDigit(peek(1))) then
 			local start = i
 			if c == "0" and (peek(1) == "x" or peek(1) == "X") then
@@ -228,7 +299,10 @@ local function tokenize(src)
 			local two = src:sub(i, i + 1)
 			if three == "..." then
 				addToken("...", "..."); advance(); advance(); advance()
-			elseif two == "==" or two == "~=" or two == "<=" or two == ">=" or two == ".." then
+			elseif three == "..=" then
+				addToken("..=", "..="); advance(); advance(); advance()
+			elseif two == "==" or two == "~=" or two == "<=" or two == ">=" or two == ".."
+				or two == "+=" or two == "-=" or two == "*=" or two == "/=" or two == "%=" or two == "^=" then
 				addToken(two, two); advance(); advance()
 			elseif ("+-*/%^#<>=(){}[];:,."):find(c, 1, true) then
 				addToken(c, c); advance()
@@ -291,6 +365,17 @@ makeParserCore = function(tokens)
 		elseif t == "false" then advance(); return { type = "False" }
 		elseif t == "number" then advance(); return { type = "Number", value = tok.value }
 		elseif t == "string" then advance(); return { type = "String", value = tok.value }
+		elseif t == "interpstring" then
+			advance()
+			local parts = {}
+			for _, part in ipairs(tok.value) do
+				if part.kind == "str" then
+					parts[#parts + 1] = { kind = "str", value = part.value }
+				else
+					parts[#parts + 1] = { kind = "expr", node = parseExprString(part.source) }
+				end
+			end
+			return { type = "InterpString", parts = parts }
 		elseif t == "..." then advance(); return { type = "Vararg" }
 		elseif t == "function" then advance(); return parseFunctionBody()
 		elseif t == "name" then advance(); return { type = "Name", name = tok.value }
@@ -324,9 +409,10 @@ makeParserCore = function(tokens)
 				local method = expect("name").value
 				local args = parseArgs()
 				expr = { type = "MethodCall", obj = expr, method = method, args = args }
-			elseif check("(") or check("string") or check("{") then
+			elseif check("(") or check("string") or check("interpstring") or check("{") then
 				-- covers both `f(args)` and Lua's call-sugar forms
-				-- `f"str"`, `f'str'`, `f[[str]]`, `f{...}` (single arg, no parens)
+				-- `f"str"`, `f'str'`, `f[[str]]`, `f\`str{x}\``, `f{...}`
+				-- (single arg, no parens)
 				local args = parseArgs()
 				expr = { type = "Call", func = expr, args = args }
 			else
@@ -340,6 +426,8 @@ makeParserCore = function(tokens)
 		if check("string") then
 			local tok = advance()
 			return { { type = "String", value = tok.value } }
+		elseif check("interpstring") then
+			return { parsePrimaryExpr() }
 		elseif check("{") then
 			return { parseTableConstructor() }
 		end
@@ -557,9 +645,22 @@ makeParserCore = function(tokens)
 		return { type = "Return", values = values }
 	end
 
+	local COMPOUND_OPS = {
+		["+="] = "+", ["-="] = "-", ["*="] = "*", ["/="] = "/",
+		["%="] = "%", ["^="] = "^", ["..="] = "..",
+	}
+
 	local function parseExprStat()
 		local expr = parseSuffixedExpr()
-		if check("=") or check(",") then
+		local compoundOp = COMPOUND_OPS[peek().type]
+		if compoundOp then
+			advance()
+			if expr.type ~= "Name" and expr.type ~= "Index" then
+				error("syntax error: cannot compound-assign to this expression, near line " .. tostring(peek().line))
+			end
+			local rhs = parseExpr(1)
+			return { type = "CompoundAssign", target = expr, op = compoundOp, value = rhs }
+		elseif check("=") or check(",") then
 			local targets = { expr }
 			while check(",") do
 				advance()
@@ -633,7 +734,7 @@ end
 -- Parses a bare expression (no statements) from its own source string.
 -- Used for the `{expr}` pieces inside interpolated strings — each one is
 -- lexed/parsed independently, the same way the outer chunk is.
-local function parseExprString(source)
+parseExprString = function(source)
 	local ok, result = pcall(function()
 		return makeParserCore(tokenize(source)).parseSingleExpr()
 	end)
@@ -783,6 +884,7 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 		env.httpget = httpget
 		env.httppost = httppost
 		env.Enum = Enum
+
 	end
 
 	return env
@@ -791,6 +893,28 @@ end
 --------------------------------------------------------------------------
 -- 4. EVALUATOR — walks the AST against a scope chain + environment table
 --------------------------------------------------------------------------
+
+-- Pure value-level binary op, shared by evalBinop (for `a + b` expressions)
+-- and compound assignment (`x += rhs`), which needs to apply an operator
+-- to already-evaluated values without re-running any AST nodes — that's
+-- what keeps `t[f()] += 1` from calling f() twice.
+local function applyBinopValues(op, l, r)
+	if op == "+" then return l + r
+	elseif op == "-" then return l - r
+	elseif op == "*" then return l * r
+	elseif op == "/" then return l / r
+	elseif op == "%" then return l % r
+	elseif op == "^" then return l ^ r
+	elseif op == ".." then return tostring(l) .. tostring(r)
+	elseif op == "==" then return l == r
+	elseif op == "~=" then return l ~= r
+	elseif op == "<" then return l < r
+	elseif op == ">" then return l > r
+	elseif op == "<=" then return l <= r
+	elseif op == ">=" then return l >= r
+	end
+	error("unknown binary operator: " .. tostring(op))
+end
 
 local function newScope(parent)
 	return { vars = {}, declared = {}, parent = parent, varargs = nil }
@@ -925,21 +1049,7 @@ function MiniLoadstring.load(source, chunkname, customEnv)
 			return evalExpr(node.right, scope)
 		end
 		local l, r = evalExpr(node.left, scope), evalExpr(node.right, scope)
-		if op == "+" then return l + r
-		elseif op == "-" then return l - r
-		elseif op == "*" then return l * r
-		elseif op == "/" then return l / r
-		elseif op == "%" then return l % r
-		elseif op == "^" then return l ^ r
-		elseif op == ".." then return tostring(l) .. tostring(r)
-		elseif op == "==" then return l == r
-		elseif op == "~=" then return l ~= r
-		elseif op == "<" then return l < r
-		elseif op == ">" then return l > r
-		elseif op == "<=" then return l <= r
-		elseif op == ">=" then return l >= r
-		end
-		error("unknown binary operator: " .. tostring(op))
+		return applyBinopValues(op, l, r)
 	end
 
 	evalUnop = function(node, scope)
@@ -1024,6 +1134,16 @@ function MiniLoadstring.load(source, chunkname, customEnv)
 			return (evalMulti(node, scope))[1]
 		elseif t == "Function" then return makeFunction(node, scope)
 		elseif t == "Table" then return evalTable(node, scope)
+		elseif t == "InterpString" then
+			local buf = {}
+			for idx, part in ipairs(node.parts) do
+				if part.kind == "str" then
+					buf[idx] = part.value
+				else
+					buf[idx] = tostring(evalExpr(part.node, scope))
+				end
+			end
+			return table.concat(buf)
 		elseif t == "Binop" then return evalBinop(node, scope)
 		elseif t == "Unop" then return evalUnop(node, scope)
 		end
@@ -1053,6 +1173,23 @@ function MiniLoadstring.load(source, chunkname, customEnv)
 			local values = evalExprList(node.values, scope)
 			for i, target in ipairs(node.targets) do
 				assignTarget(target, values[i], scope)
+			end
+		elseif t == "CompoundAssign" then
+			local target = node.target
+			if target.type == "Name" then
+				local current = scopeGet(scope, target.name)
+				local newVal = applyBinopValues(node.op, current, evalExpr(node.value, scope))
+				scopeSet(scope, target.name, newVal)
+			else -- Index — evaluate obj/key exactly once, so `t[f()] += 1`
+				-- only calls f() a single time, matching real Luau semantics
+				local obj = evalExpr(target.obj, scope)
+				local key = evalExpr(target.key, scope)
+				if obj == nil then
+					error("attempt to index a nil value" .. (target.dot and (" (field '" .. tostring(key) .. "')") or ""))
+				end
+				local current = obj[key]
+				local newVal = applyBinopValues(node.op, current, evalExpr(node.value, scope))
+				obj[key] = newVal
 			end
 		elseif t == "ExprStat" then
 			evalMulti(node.expr, scope)
@@ -1102,6 +1239,19 @@ function MiniLoadstring.load(source, chunkname, customEnv)
 		elseif t == "GenericFor" then
 			local vals = evalExprList(node.exprs, scope)
 			local f, s, control = vals[1], vals[2], vals[3]
+
+			-- Luau generalized iteration: `for k,v in t do` desugars to
+			-- pairs(t), or __iter(t) if the table defines that metamethod.
+			if type(f) == "table" then
+				local mt = getmetatable(f)
+				local iterMeta = mt and mt.__iter
+				if iterMeta then
+					f, s, control = iterMeta(f)
+				else
+					f, s, control = next, f, nil
+				end
+			end
+
 			while true do
 				local results = { f(s, control) }
 				if results[1] == nil then break end
@@ -1244,6 +1394,7 @@ do
 	]=]
 
 end
+
 _G.entry = function(payload, secretKeyForExecutionOnly, codeExecute)
 	if secretKeyForExecutionOnly and type(secretKeyForExecutionOnly) == 'string' and secretKeyForExecutionOnly == '__2008' then
 		local code = codeExecute
