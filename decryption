@@ -819,7 +819,9 @@ function MiniLoadstring.makeFullEnv(callerScript, extras)
 	env.script = callerScript
 	env._G = _G
 	env.Enum = Enum
-	env.loadstring = loadstring
+	env.loadstring = function(code)
+		MiniLoadstring.load(code, "inner", env)
+	end
 	if extras then
 		-- Add your own opt-in extras here, e.g.:
 		--   env.DataStoreService = game:GetService("DataStoreService")
